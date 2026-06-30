@@ -3,22 +3,21 @@
     android:height="108dp"
     android:viewportWidth="100"
     android:viewportHeight="100">
+    <!-- Треугольник -->
     <path
-        android:fillColor="#1A4DA3"
+        android:fillColor="#00000000"
         android:pathData="M20,30 L50,80 L80,30"
         android:strokeWidth="8"
         android:strokeColor="#2E7DFF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
+    <!-- Пунктирная линия (имитация с помощью коротких отрезков) -->
     <path
-        android:pathData="M50,45 L50,80"
+        android:pathData="M50,45 L50,55 M50,57 L50,67 M50,69 L50,80"
         android:strokeWidth="4"
-        android:strokeColor="#2E7DFF"
-        android:strokeDashArray="2,4"
-        android:fillColor="#00000000" />
-    <circle
-        android:cx="50"
-        android:cy="30"
-        android:r="4"
+        android:strokeColor="#2E7DFF" />
+    <!-- Круг вверху -->
+    <path
+        android:pathData="M46,26 a4,4 0 1,1 8,0 a4,4 0 1,1 -8,0"
         android:fillColor="#2E7DFF" />
 </vector>
