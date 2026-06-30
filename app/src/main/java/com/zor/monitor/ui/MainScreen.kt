@@ -37,53 +37,57 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-// Маски даты и времени
+// -----------------------------------------------------------
+// Новые, более стабильные маски
+// -----------------------------------------------------------
 class DateMask : VisualTransformation {
-    override fun filter(text: androidx.compose.ui.text.AnnotatedString): TransformedText {
-        val raw = text.text.filter { it.isDigit() }.take(8)
+    override fun filter(text: AnnotatedString): TransformedText {
+        val digits = text.text.filter { it.isDigit() }.take(8)
         val formatted = buildString {
-            for (i in raw.indices) {
-                append(raw[i])
+            for (i in digits.indices) {
+                append(digits[i])
                 if (i == 1 || i == 3) append('.')
             }
         }
+        // offset mapping, который корректно работает при удалении
         val offsetMapping = object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {
                 if (offset <= 1) return offset
-                if (offset <= 3) return offset + 1
-                if (offset <= 5) return offset + 2
-                return 8
+                if (offset <= 3) return offset + 1  // добавляем 1 за первую точку
+                if (offset <= 5) return offset + 2  // добавляем 2 за две точки
+                return minOf(offset + 2, formatted.length) // максимум длина строки
             }
             override fun transformedToOriginal(offset: Int): Int {
                 if (offset <= 2) return offset
                 if (offset <= 5) return offset - 1
-                return offset - 2
+                return maxOf(offset - 2, 0)
             }
         }
-        return TransformedText(androidx.compose.ui.text.AnnotatedString(formatted), offsetMapping)
+        return TransformedText(AnnotatedString(formatted), offsetMapping)
     }
 }
 
 class TimeMask : VisualTransformation {
-    override fun filter(text: androidx.compose.ui.text.AnnotatedString): TransformedText {
-        val raw = text.text.filter { it.isDigit() }.take(4)
+    override fun filter(text: AnnotatedString): TransformedText {
+        val digits = text.text.filter { it.isDigit() }.take(4)
         val formatted = when {
-            raw.length >= 3 -> "${raw.substring(0, 2)}:${raw.substring(2)}"
-            raw.length == 2 -> "${raw}:"
-            else -> raw
+            digits.length >= 3 -> "${digits.substring(0, 2)}:${digits.substring(2)}"
+            digits.length == 2 -> "${digits}:"
+            else -> digits
         }
         val offsetMapping = object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {
                 if (offset <= 1) return offset
-                if (offset == 2) return 3
-                return offset + 1
+                if (offset == 2) return 3  // перепрыгиваем через двоеточие
+                if (offset >= 3) return offset + 1
+                return offset
             }
             override fun transformedToOriginal(offset: Int): Int {
                 if (offset <= 2) return offset
                 return offset - 1
             }
         }
-        return TransformedText(androidx.compose.ui.text.AnnotatedString(formatted), offsetMapping)
+        return TransformedText(AnnotatedString(formatted), offsetMapping)
     }
 }
 
@@ -134,10 +138,14 @@ fun MainScreen(context: Context) {
         try {
             val file = File(path)
             val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
-            val mimeType = if (path.endsWith(".csv")) "text/csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            val mime = when {
+                path.endsWith(".csv") -> "text/csv"
+                path.endsWith(".json") -> "application/json"
+                else -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
             val intent = Intent(Intent.ACTION_SEND).apply {
                 putExtra(Intent.EXTRA_STREAM, uri)
-                setDataAndType(uri, mimeType)
+                setDataAndType(uri, mime)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             ctx.startActivity(Intent.createChooser(intent, "Поделиться отчётом"))
@@ -146,30 +154,14 @@ fun MainScreen(context: Context) {
         }
     }
 
-    // Фильтрация и валидация частот
-    fun onVideoFreqChange(raw: String) {
-        val filtered = raw.filter { it.isDigit() }
-        fv = filtered
-        val errs = validationErrors.toMutableMap()
-        val num = filtered.toIntOrNull()
-        if (filtered.isNotEmpty() && (num == null || num !in 100..12000)) {
-            errs["fv_range"] = true
-        } else {
-            errs.remove("fv_range")
-        }
-        validationErrors = errs
-    }
-    fun onControlFreqChange(raw: String) {
-        val filtered = raw.filter { it.isDigit() }
-        fc = filtered
-        val errs = validationErrors.toMutableMap()
-        val num = filtered.toIntOrNull()
-        if (filtered.isNotEmpty() && (num == null || num !in 100..5000)) {
-            errs["fc_range"] = true
-        } else {
-            errs.remove("fc_range")
-        }
-        validationErrors = errs
+    // Валидация частот – только цифры, диапазоны
+    fun cleanFreqInput(raw: String, min: Int, max: Int): Pair<String, String?> {
+        val digits = raw.filter { it.isDigit() }
+        val num = digits.toIntOrNull()
+        val error = if (digits.isNotEmpty() && (num == null || num < min || num > max))
+            "Диапазон $min–$max"
+        else null
+        return digits to error
     }
 
     fun validate(): Boolean {
@@ -225,11 +217,7 @@ fun MainScreen(context: Context) {
         topBar = {
             TopAppBar(
                 title = { Text("VZOR", fontWeight = FontWeight.Bold) },
-                actions = {
-                    IconButton(onClick = { showSettings = true }) {
-                        Text("☰", fontSize = 22.sp)
-                    }
-                }
+                actions = { IconButton(onClick = { showSettings = true }) { Text("☰", fontSize = 22.sp) } }
             )
         }
     ) { padding ->
@@ -268,8 +256,19 @@ fun MainScreen(context: Context) {
                     type = type, onTypeChange = { type = it; validationErrors = validationErrors - "type" },
                     types = types,
                     expandedType = expandedType, onExpandedTypeChange = { expandedType = it },
-                    fv = fv, onFvChange = { onVideoFreqChange(it) },
-                    fc = fc, onFcChange = { onControlFreqChange(it) },
+                    fv = fv, fc = fc,
+                    onFvChange = { raw ->
+                        val (digits, err) = cleanFreqInput(raw, 100, 12000)
+                        fv = digits
+                        if (err != null) validationErrors = validationErrors + ("fv_range" to true)
+                        else validationErrors = validationErrors - "fv_range"
+                    },
+                    onFcChange = { raw ->
+                        val (digits, err) = cleanFreqInput(raw, 100, 5000)
+                        fc = digits
+                        if (err != null) validationErrors = validationErrors + ("fc_range" to true)
+                        else validationErrors = validationErrors - "fc_range"
+                    },
                     cd = cd, onCdChange = { cd = it },
                     ct = ct, onCtChange = { ct = it },
                     suppressed = suppressed, onSuppressedChange = { suppressed = it },
@@ -338,8 +337,8 @@ fun MainScreen(context: Context) {
 fun DetectionTab(
     type: String, onTypeChange: (String) -> Unit, types: List<String>,
     expandedType: Boolean, onExpandedTypeChange: (Boolean) -> Unit,
-    fv: String, onFvChange: (String) -> Unit,
-    fc: String, onFcChange: (String) -> Unit,
+    fv: String, fc: String,
+    onFvChange: (String) -> Unit, onFcChange: (String) -> Unit,
     cd: String, onCdChange: (String) -> Unit,
     ct: String, onCtChange: (String) -> Unit,
     suppressed: Boolean, onSuppressedChange: (Boolean) -> Unit,
@@ -374,39 +373,50 @@ fun DetectionTab(
         }
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Частота видео с проверкой диапазона
+        // Частота видео
         OutlinedTextField(
             value = fv,
             onValueChange = onFvChange,
             label = { Text("Частота видео (МГц)") },
             isError = validationErrors["fv"] == true || validationErrors["fv_range"] == true,
-            supportingText = {
-                if (validationErrors["fv_range"] == true) Text("Допустимый диапазон 100–12000")
-            },
+            supportingText = { if (validationErrors["fv_range"] == true) Text("Диапазон 100–12000") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Частота управления с проверкой диапазона (необязательно)
+        // Частота управления
         OutlinedTextField(
             value = fc,
             onValueChange = onFcChange,
             label = { Text("Частота управления (МГц)") },
             isError = validationErrors["fc_range"] == true,
-            supportingText = {
-                if (validationErrors["fc_range"] == true) Text("Допустимый диапазон 100–5000")
-            },
+            supportingText = { if (validationErrors["fc_range"] == true) Text("Диапазон 100–5000") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Дата и время с новыми масками
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(cd, onCdChange, label = { Text("Дата") }, visualTransformation = DateMask(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
+            OutlinedTextField(
+                value = cd,
+                onValueChange = onCdChange,
+                label = { Text("Дата") },
+                visualTransformation = DateMask(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f)
+            )
             Spacer(modifier = Modifier.width(4.dp))
-            IconButton(onClick = onSetNow) { Text("🕒") }
-            OutlinedTextField(ct, onCtChange, label = { Text("Время") }, visualTransformation = TimeMask(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
+            IconButton(onClick = onSetNow) { Text("🕒", fontSize = 20.sp) }
+            OutlinedTextField(
+                value = ct,
+                onValueChange = onCtChange,
+                label = { Text("Время") },
+                visualTransformation = TimeMask(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f)
+            )
         }
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -429,11 +439,7 @@ fun DetectionTab(
             Spacer(modifier = Modifier.height(20.dp))
             Text("Последняя запись", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
-            RecordCard(
-                record = lastRecord,
-                onDelete = { onDelete(lastRecord.id) },
-                showDelete = !lastRecord.exported
-            )
+            RecordCard(record = lastRecord, onDelete = { onDelete(lastRecord.id) }, showDelete = !lastRecord.exported)
         }
     }
 }

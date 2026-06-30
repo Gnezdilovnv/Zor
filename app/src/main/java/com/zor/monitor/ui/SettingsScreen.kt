@@ -45,44 +45,7 @@ fun SettingsScreen(
     var deleteExpanded by remember { mutableStateOf(false) }
     var addError by remember { mutableStateOf<String?>(null) }
 
-    // Регулярка: только буквы русского и английского, пробелы, дефис
     val allowedPattern = Pattern.compile("^[а-яА-Яa-zA-Z\\s-]+$")
-
-    // Выпадающие списки для каждого типа значений (стиль как у Формата)
-    @Composable
-    fun ListWithAddDelete(
-        label: String,
-        items: List<String>,
-        selectedItem: String,
-        onItemSelected: (String) -> Unit,
-        onAddRequest: () -> Unit,
-        onDeleteRequest: () -> Unit
-    ) {
-        var expanded by remember { mutableStateOf(false) }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = Modifier.weight(1f)) {
-                OutlinedTextField(
-                    value = selectedItem,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text(label) },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center)
-                )
-                ExposedDropdownMenu(expanded, { expanded = false }) {
-                    items.forEach { item ->
-                        DropdownMenuItem(text = { Text(item) }, onClick = {
-                            onItemSelected(item)
-                            expanded = false
-                        })
-                    }
-                }
-            }
-            IconButton(onClick = onAddRequest) { Text("+", fontSize = 20.sp) }
-            IconButton(onClick = onDeleteRequest) { Text("-", fontSize = 20.sp) }
-        }
-    }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Настройки") }, navigationIcon = { TextButton(onClick = onBack) { Text("Назад") } }) }
@@ -145,37 +108,49 @@ fun SettingsScreen(
             }
             Divider()
 
-            // Список значений – три блока с выпадающими полями
+            // Списки значений – аккуратные строки с кнопками
             Text("Списки значений", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
 
             // Типы
-            ListWithAddDelete(
-                label = "Типы",
-                items = currentTypes,
-                selectedItem = currentTypes.firstOrNull() ?: "",
-                onItemSelected = { /* только просмотр, изменение не требуется */ },
-                onAddRequest = { showAddDialog = "types" },
-                onDeleteRequest = { showDeleteDialog = "types" }
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = currentTypes.joinToString(", "),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Типы") },
+                    modifier = Modifier.weight(1f),
+                    textStyle = LocalTextStyle.current.copy(fontSize = 14.sp)
+                )
+                IconButton(onClick = { showAddDialog = "types" }) { Text("+", fontSize = 20.sp) }
+                IconButton(onClick = { showDeleteDialog = "types" }) { Text("-", fontSize = 20.sp) }
+            }
             // Направления
-            ListWithAddDelete(
-                label = "Направления",
-                items = currentDirections,
-                selectedItem = currentDirections.firstOrNull() ?: "",
-                onItemSelected = { },
-                onAddRequest = { showAddDialog = "directions" },
-                onDeleteRequest = { showDeleteDialog = "directions" }
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = currentDirections.joinToString(", "),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Направления") },
+                    modifier = Modifier.weight(1f),
+                    textStyle = LocalTextStyle.current.copy(fontSize = 14.sp)
+                )
+                IconButton(onClick = { showAddDialog = "directions" }) { Text("+", fontSize = 20.sp) }
+                IconButton(onClick = { showDeleteDialog = "directions" }) { Text("-", fontSize = 20.sp) }
+            }
             // Точки
-            ListWithAddDelete(
-                label = "Точки",
-                items = currentPoints,
-                selectedItem = currentPoints.firstOrNull() ?: "",
-                onItemSelected = { },
-                onAddRequest = { showAddDialog = "points" },
-                onDeleteRequest = { showDeleteDialog = "points" }
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = currentPoints.joinToString(", "),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Точки") },
+                    modifier = Modifier.weight(1f),
+                    textStyle = LocalTextStyle.current.copy(fontSize = 14.sp)
+                )
+                IconButton(onClick = { showAddDialog = "points" }) { Text("+", fontSize = 20.sp) }
+                IconButton(onClick = { showDeleteDialog = "points" }) { Text("-", fontSize = 20.sp) }
+            }
 
             Divider()
             Button(onClick = {
@@ -183,9 +158,7 @@ fun SettingsScreen(
                     mapOf("direction" to sd, "point" to sp, "export_format" to fmt, "report_period" to period),
                     mapOf("types" to currentTypes, "directions" to currentDirections, "points" to currentPoints)
                 )
-            }, modifier = Modifier.fillMaxWidth()) {
-                Text("СОХРАНИТЬ", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            }
+            }, modifier = Modifier.fillMaxWidth()) { Text("СОХРАНИТЬ", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
         }
     }
 
