@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -19,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -39,7 +41,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 // -----------------------------------------------------------
-// Новые, более стабильные маски
+// Маски (уже стабильные)
 // -----------------------------------------------------------
 class DateMask : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
@@ -50,13 +52,12 @@ class DateMask : VisualTransformation {
                 if (i == 1 || i == 3) append('.')
             }
         }
-        // offset mapping, который корректно работает при удалении
         val offsetMapping = object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {
                 if (offset <= 1) return offset
-                if (offset <= 3) return offset + 1  // добавляем 1 за первую точку
-                if (offset <= 5) return offset + 2  // добавляем 2 за две точки
-                return minOf(offset + 2, formatted.length) // максимум длина строки
+                if (offset <= 3) return offset + 1
+                if (offset <= 5) return offset + 2
+                return minOf(offset + 2, formatted.length)
             }
             override fun transformedToOriginal(offset: Int): Int {
                 if (offset <= 2) return offset
@@ -79,7 +80,7 @@ class TimeMask : VisualTransformation {
         val offsetMapping = object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {
                 if (offset <= 1) return offset
-                if (offset == 2) return 3  // перепрыгиваем через двоеточие
+                if (offset == 2) return 3
                 if (offset >= 3) return offset + 1
                 return offset
             }
@@ -155,7 +156,6 @@ fun MainScreen(context: Context) {
         }
     }
 
-    // Валидация частот – только цифры, диапазоны
     fun cleanFreqInput(raw: String, min: Int, max: Int): Pair<String, String?> {
         val digits = raw.filter { it.isDigit() }
         val num = digits.toIntOrNull()
@@ -217,8 +217,22 @@ fun MainScreen(context: Context) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("VZOR", fontWeight = FontWeight.Bold) },
-                actions = { IconButton(onClick = { showSettings = true }) { Text("☰", fontSize = 22.sp) } }
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_logo),
+                            contentDescription = "Logo",
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("VZOR", fontWeight = FontWeight.Bold)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showSettings = true }) {
+                        Text("☰", fontSize = 22.sp)
+                    }
+                }
             )
         }
     ) { padding ->
@@ -398,7 +412,7 @@ fun DetectionTab(
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Дата и время с новыми масками
+        // Дата и время
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = cd,
