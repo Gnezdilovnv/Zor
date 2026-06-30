@@ -1,10 +1,8 @@
 package com.zor.monitor.utils
 
 import android.content.Context
-import android.os.Environment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -20,9 +18,9 @@ object ReportGenerator {
         val baseName = "${datePart}_${timePart}_$direction"
 
         val file = when (format) {
-            "csv" -> StorageManager.exportCSV(context, filtered, baseName)
-            "json" -> StorageManager.exportJSON(context, filtered, baseName)
-            else -> StorageManager.exportXLSX(context, filtered, baseName)
+            "csv"   -> StorageManager.exportCSV(context, filtered, baseName)
+            "json"  -> StorageManager.exportJSON(context, filtered, baseName)
+            else    -> StorageManager.exportXLSX(context, filtered, baseName)
         }
         if (file != null) {
             StorageManager.markAsExported(context, filtered.map { it.id })

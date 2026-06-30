@@ -1,12 +1,12 @@
 package com.zor.monitor.ui
 
-import android.app.Application
 import android.content.Intent
 import android.media.MediaPlayer
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -40,6 +40,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
+// Маски
 class DateMask : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val digits = text.text.filter { it.isDigit() }.take(8)
@@ -126,17 +127,31 @@ fun MainScreen() {
     fun refresh() { records = StorageManager.loadRecords(ctx) }
 
     fun playSound(resId: Int) {
-        try { val mp = MediaPlayer.create(ctx, resId); mp?.start(); mp?.setOnCompletionListener { it.release() } } catch (_: Exception) {}
+        try {
+            val mp = MediaPlayer.create(ctx, resId)
+            mp?.start()
+            mp?.setOnCompletionListener { it.release() }
+        } catch (_: Exception) {}
     }
 
     fun shareFile(path: String) {
         try {
             val file = File(path)
             val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
-            val mime = when { path.endsWith(".csv") -> "text/csv"; path.endsWith(".json") -> "application/json"; else -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
-            val intent = Intent(Intent.ACTION_SEND).apply { putExtra(Intent.EXTRA_STREAM, uri); setDataAndType(uri, mime); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            val mime = when {
+                path.endsWith(".csv")  -> "text/csv"
+                path.endsWith(".json") -> "application/json"
+                else -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                putExtra(Intent.EXTRA_STREAM, uri)
+                setDataAndType(uri, mime)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
             ctx.startActivity(Intent.createChooser(intent, "Поделиться отчётом"))
-        } catch (e: Exception) { Toast.makeText(ctx, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show() }
+        } catch (e: Exception) {
+            Toast.makeText(ctx, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     fun cleanFreqInput(raw: String, min: Int, max: Int): Pair<String, String?> {
@@ -150,8 +165,14 @@ fun MainScreen() {
         val errors = mutableMapOf<String, Boolean>()
         if (type.isEmpty()) errors["type"] = true
         if (fv.isEmpty()) errors["fv"] = true
-        else { val num = fv.toIntOrNull(); if (num == null || num !in 100..12000) errors["fv_range"] = true }
-        if (fc.isNotEmpty()) { val num = fc.toIntOrNull(); if (num == null || num !in 100..5000) errors["fc_range"] = true }
+        else {
+            val num = fv.toIntOrNull()
+            if (num == null || num !in 100..12000) errors["fv_range"] = true
+        }
+        if (fc.isNotEmpty()) {
+            val num = fc.toIntOrNull()
+            if (num == null || num !in 100..5000) errors["fc_range"] = true
+        }
         if (settings["direction"].isNullOrBlank()) errors["direction"] = true
         if (settings["point"].isNullOrBlank()) errors["point"] = true
         validationErrors = errors
@@ -163,7 +184,13 @@ fun MainScreen() {
             onDismissRequest = { deleteId = null },
             title = { Text("Удалить запись?") },
             text = { Text("Нельзя отменить") },
-            confirmButton = { TextButton(onClick = { deleteId?.let { StorageManager.deleteRecord(ctx, it) }; deleteId = null; refresh() }) { Text("Удалить", color = Color.Red) } },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteId?.let { StorageManager.deleteRecord(ctx, it) }
+                    deleteId = null
+                    refresh()
+                }) { Text("Удалить", color = Color.Red) }
+            },
             dismissButton = { TextButton(onClick = { deleteId = null }) { Text("Отмена") } }
         )
     }
@@ -171,7 +198,12 @@ fun MainScreen() {
     if (showSettings) {
         SettingsScreen(
             settings = settings, directions = directions, points = points, types = types,
-            onSave = { s, l -> settings = s; customLists = l; StorageManager.saveSettings(ctx, s); StorageManager.saveCustomLists(ctx, l); showSettings = false },
+            onSave = { s, l ->
+                settings = s; customLists = l
+                StorageManager.saveSettings(ctx, s)
+                StorageManager.saveCustomLists(ctx, l)
+                showSettings = false
+            },
             onBack = { showSettings = false }
         )
         return
@@ -187,7 +219,10 @@ fun MainScreen() {
                         Text("VZOR", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, titleContentColor = MaterialTheme.colorScheme.onSurface),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                ),
                 actions = { IconButton(onClick = { showSettings = true }) { Text("☰", fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurface) } }
             )
         }
@@ -199,10 +234,15 @@ fun MainScreen() {
                     Tab(
                         selected = selected,
                         onClick = { selectedTab = index },
-                        modifier = if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                        else Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        modifier = if (selected)
+                            Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        else
+                            Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                     ) {
-                        Text(text = title, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, fontSize = 16.sp, color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
+                        Text(text = title, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, fontSize = 16.sp,
+                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
                     }
                 }
             }
@@ -226,10 +266,7 @@ fun MainScreen() {
                     },
                     cd = cd, onCdChange = { cd = it },
                     ct = ct, onCtChange = { ct = it },
-                    onSetNow = {
-                        cd = df.format(Date())
-                        ct = tf.format(Date())
-                    },
+                    onSetNow = { cd = df.format(Date()); ct = tf.format(Date()) },
                     suppressed = suppressed, onSuppressedChange = { suppressed = it },
                     settings = settings,
                     validationErrors = validationErrors,
@@ -244,8 +281,7 @@ fun MainScreen() {
                                 direction = settings["direction"]!!, point = settings["point"]!!,
                                 type = type, freqVideo = fv, freqControl = fc,
                                 suppressed = if (suppressed) "ДА" else "НЕТ",
-                                voiceText = "",
-                                isoDate = isoDate
+                                voiceText = "", isoDate = isoDate
                             ))
                             refresh()
                             fv = ""; fc = ""; suppressed = false
@@ -335,7 +371,8 @@ fun DetectionTab(
             supportingText = { if (validationErrors["fv_range"] == true) Text("Диапазон 100–12000", color = MaterialTheme.colorScheme.error) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = MaterialTheme.colorScheme.outline, focusedLabelColor = MaterialTheme.colorScheme.primary, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant, cursorColor = MaterialTheme.colorScheme.primary)
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                focusedLabelColor = MaterialTheme.colorScheme.primary, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant, cursorColor = MaterialTheme.colorScheme.primary)
         )
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -344,7 +381,8 @@ fun DetectionTab(
             supportingText = { if (validationErrors["fc_range"] == true) Text("Диапазон 100–5000", color = MaterialTheme.colorScheme.error) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = MaterialTheme.colorScheme.outline, focusedLabelColor = MaterialTheme.colorScheme.primary, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant, cursorColor = MaterialTheme.colorScheme.primary)
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                focusedLabelColor = MaterialTheme.colorScheme.primary, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant, cursorColor = MaterialTheme.colorScheme.primary)
         )
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -352,14 +390,16 @@ fun DetectionTab(
             OutlinedTextField(cd, onCdChange, label = { Text("Дата", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 visualTransformation = DateMask(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = MaterialTheme.colorScheme.outline, focusedLabelColor = MaterialTheme.colorScheme.primary, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant, cursorColor = MaterialTheme.colorScheme.primary)
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                    focusedLabelColor = MaterialTheme.colorScheme.primary, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant, cursorColor = MaterialTheme.colorScheme.primary)
             )
             Spacer(modifier = Modifier.width(4.dp))
             IconButton(onClick = onSetNow) { Text("🕒", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary) }
             OutlinedTextField(ct, onCtChange, label = { Text("Время", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 visualTransformation = TimeMask(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = MaterialTheme.colorScheme.outline, focusedLabelColor = MaterialTheme.colorScheme.primary, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant, cursorColor = MaterialTheme.colorScheme.primary)
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                    focusedLabelColor = MaterialTheme.colorScheme.primary, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant, cursorColor = MaterialTheme.colorScheme.primary)
             )
         }
         Spacer(modifier = Modifier.height(8.dp))

@@ -16,22 +16,27 @@ import androidx.work.*
 import com.zor.monitor.ui.MainScreen
 import com.zor.monitor.worker.NotificationHelper
 import com.zor.monitor.worker.ReportReminderWorker
-import com.zor.monitor.utils.StorageManager
 import java.util.*
 import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
-    private val permLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { if (it.values.all { it }) schedule() }
+    private val permLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { if (it.values.all { it }) schedule() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         NotificationHelper.createChannel(this)
-        val perms = mutableListOf(Manifest.permission.RECORD_AUDIO)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-            perms.add(Manifest.permission.POST_NOTIFICATIONS)
-        if (perms.any { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED })
-            permLauncher.launch(perms.toTypedArray())
-        else schedule()
+
+        // Только уведомления (Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            permLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+        } else {
+            schedule()
+        }
 
         setContent {
             Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -42,6 +47,7 @@ class MainActivity : ComponentActivity() {
 
     private fun schedule() {
         WorkManager.getInstance(this).cancelAllWorkByTag("report_reminder")
+
         val calendar = Calendar.getInstance(TimeZone.getDefault())
         calendar.set(Calendar.HOUR_OF_DAY, 16)
         calendar.set(Calendar.MINUTE, 0)
