@@ -15,6 +15,10 @@ object StorageManager {
     private const val CUSTOM_KEY = "custom_lists"
     private val gson = Gson()
 
+    // Папки
+    private fun getVzorDir(): File = File(Environment.getExternalStorageDirectory(), "Vzor")
+    private fun getBackupDir(): File = File(getVzorDir(), "Backup")
+
     fun loadRecords(context: Context): List<Record> {
         val json = context.getSharedPreferences("app_data", Context.MODE_PRIVATE).getString(RECORDS_KEY, null) ?: return emptyList()
         return gson.fromJson(json, object : TypeToken<List<Record>>() {}.type)
@@ -30,18 +34,20 @@ object StorageManager {
 
     private fun backupToFile(context: Context, records: List<Record>) {
         try {
-            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ZorBackup").also { it.mkdirs() }
+            val dir = getBackupDir().also { it.mkdirs() }
             val df = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
             File(dir, "backup_${df.format(Date())}.json").writeText(gson.toJson(records))
             dir.listFiles()?.sortedByDescending { it.lastModified() }?.drop(5)?.forEach { it.delete() }
         } catch (_: Exception) {}
     }
 
+    // CSV с новым порядком: дата, время, тип, частота видео, частота управления, подавлен, точка, направление
     fun exportCSV(context: Context, records: List<Record>, baseName: String): File? = try {
-        val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "$baseName.csv")
+        val dir = getVzorDir().also { it.mkdirs() }
+        val file = File(dir, "$baseName.csv")
         file.bufferedWriter().use { w ->
-            w.write("Дата,Время,Направление,Точка,Тип,Частота видео,Частота управления,Подавлен,Голосовой ввод\n")
-            records.forEach { r -> w.write("\"${r.date}\",\"${r.time}\",\"${r.direction}\",\"${r.point}\",\"${r.type}\",\"${r.freqVideo}\",\"${r.freqControl}\",\"${r.suppressed}\",\"${r.voiceText}\"\n") }
+            w.write("Дата,Время,Тип,Частота видео,Частота управления,Подавлен,Точка,Направление\n")
+            records.forEach { r -> w.write("\"${r.date}\",\"${r.time}\",\"${r.type}\",\"${r.freqVideo}\",\"${r.freqControl}\",\"${r.suppressed}\",\"${r.point}\",\"${r.direction}\"\n") }
         }; file
     } catch (_: Exception) { null }
 
@@ -60,6 +66,6 @@ object StorageManager {
 
     private fun getDefaultSettings(): Map<String, String> = mapOf(
         "direction" to "", "point" to "",
-        "system_theme" to "true", "export_format" to "xlsx", "report_period" to "all"
+        "export_format" to "xlsx", "report_period" to "all"
     )
 }

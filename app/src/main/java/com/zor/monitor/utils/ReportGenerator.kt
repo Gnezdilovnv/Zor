@@ -11,6 +11,8 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 object ReportGenerator {
+    private fun getVzorDir(): File = File(Environment.getExternalStorageDirectory(), "Vzor")
+
     suspend fun generateReport(context: Context, format: String = "xlsx", period: String = "all"): String? = withContext(Dispatchers.IO) {
         val filtered = filterByPeriod(StorageManager.getUnexportedRecords(context), period)
         if (filtered.isEmpty()) return@withContext null
@@ -46,21 +48,22 @@ object ReportGenerator {
 
     private fun generateXlsx(context: Context, records: List<com.zor.monitor.models.Record>, baseName: String): String {
         val filename = "$baseName.xlsx"
-        val dir = File(context.cacheDir, "reports").also { it.mkdirs() }
-        val file = File(dir, filename)
+        val cacheDir = File(context.cacheDir, "reports").also { it.mkdirs() }
+        val file = File(cacheDir, filename)
         val wb = XSSFWorkbook()
         val sheet = wb.createSheet("Данные")
-        val headers = listOf("Дата","Время","Направление","Точка","Тип","Частота видео","Частота управления","Подавлен","Голосовой ввод")
+        val headers = listOf("Дата","Время","Тип","Частота видео","Частота управления","Подавлен","Точка","Направление")
         val headerRow = sheet.createRow(0)
         headers.forEachIndexed { i, h -> headerRow.createCell(i).setCellValue(h) }
         records.forEachIndexed { i, r ->
             val row = sheet.createRow(i + 1)
-            listOf(r.date, r.time, r.direction, r.point, r.type, r.freqVideo, r.freqControl, r.suppressed, r.voiceText)
+            listOf(r.date, r.time, r.type, r.freqVideo, r.freqControl, r.suppressed, r.point, r.direction)
                 .forEachIndexed { j, v -> row.createCell(j).setCellValue(v) }
         }
         FileOutputStream(file).use { wb.write(it) }
         wb.close()
-        val pub = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), filename)
+        val vzorDir = getVzorDir().also { it.mkdirs() }
+        val pub = File(vzorDir, filename)
         file.copyTo(pub, overwrite = true)
         StorageManager.markAsExported(context, records.map { it.id })
         return pub.absolutePath

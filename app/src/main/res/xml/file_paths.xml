@@ -2,5 +2,5 @@
 <paths>
     <cache-path name="reports" path="reports/" />
     <external-path name="downloads" path="Download/" />
-    <external-path name="pictures" path="Pictures/" />
+    <external-path name="vzor" path="Vzor/" />
 </paths>
