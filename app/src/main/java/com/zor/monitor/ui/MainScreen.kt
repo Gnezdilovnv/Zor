@@ -1,5 +1,7 @@
 package com.zor.monitor.ui
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
@@ -7,6 +9,7 @@ import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,12 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,59 +39,6 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-// -----------------------------------------------------------
-// Маски (уже стабильные)
-// -----------------------------------------------------------
-class DateMask : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        val digits = text.text.filter { it.isDigit() }.take(8)
-        val formatted = buildString {
-            for (i in digits.indices) {
-                append(digits[i])
-                if (i == 1 || i == 3) append('.')
-            }
-        }
-        val offsetMapping = object : OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int {
-                if (offset <= 1) return offset
-                if (offset <= 3) return offset + 1
-                if (offset <= 5) return offset + 2
-                return minOf(offset + 2, formatted.length)
-            }
-            override fun transformedToOriginal(offset: Int): Int {
-                if (offset <= 2) return offset
-                if (offset <= 5) return offset - 1
-                return maxOf(offset - 2, 0)
-            }
-        }
-        return TransformedText(AnnotatedString(formatted), offsetMapping)
-    }
-}
-
-class TimeMask : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        val digits = text.text.filter { it.isDigit() }.take(4)
-        val formatted = when {
-            digits.length >= 3 -> "${digits.substring(0, 2)}:${digits.substring(2)}"
-            digits.length == 2 -> "${digits}:"
-            else -> digits
-        }
-        val offsetMapping = object : OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int {
-                if (offset <= 1) return offset
-                if (offset == 2) return 3
-                if (offset >= 3) return offset + 1
-                return offset
-            }
-            override fun transformedToOriginal(offset: Int): Int {
-                if (offset <= 2) return offset
-                return offset - 1
-            }
-        }
-        return TransformedText(AnnotatedString(formatted), offsetMapping)
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(context: Context) {
@@ -105,10 +51,10 @@ fun MainScreen(context: Context) {
     var fv by remember { mutableStateOf("") }
     var fc by remember { mutableStateOf("") }
     var suppressed by remember { mutableStateOf(false) }
-    val df = remember { SimpleDateFormat("dd.MM.yy", Locale.getDefault()) }
-    val tf = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    var cd by remember { mutableStateOf(df.format(Date())) }
-    var ct by remember { mutableStateOf(tf.format(Date())) }
+    val dateFormat = remember { SimpleDateFormat("dd.MM.yy", Locale.getDefault()) }
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
+    var selectedTime by remember { mutableStateOf(Calendar.getInstance()) }
     var expandedType by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var deleteId by remember { mutableStateOf<String?>(null) }
@@ -121,8 +67,8 @@ fun MainScreen(context: Context) {
     val types = customLists["types"] ?: emptyList()
     val exportFormat = settings["export_format"] ?: "xlsx"
     val reportPeriod = settings["report_period"] ?: "all"
-    val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-    val todayRecords = records.filter { it.date == today }
+    val todayDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    val todayRecords = records.filter { it.date == todayDate }
 
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -179,6 +125,23 @@ fun MainScreen(context: Context) {
         }
         validationErrors = errors
         return errors.isEmpty()
+    }
+
+    // Диалоги даты и времени
+    fun showDatePicker() {
+        val cal = selectedDate
+        DatePickerDialog(ctx, { _, year, month, day ->
+            cal.set(year, month, day)
+            selectedDate = cal
+        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+    }
+    fun showTimePicker() {
+        val cal = selectedTime
+        TimePickerDialog(ctx, { _, hour, minute ->
+            cal.set(Calendar.HOUR_OF_DAY, hour)
+            cal.set(Calendar.MINUTE, minute)
+            selectedTime = cal
+        }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
     }
 
     if (deleteId != null) {
@@ -284,8 +247,14 @@ fun MainScreen(context: Context) {
                         if (err != null) validationErrors = validationErrors + ("fc_range" to true)
                         else validationErrors = validationErrors - "fc_range"
                     },
-                    cd = cd, onCdChange = { cd = it },
-                    ct = ct, onCtChange = { ct = it },
+                    selectedDate = selectedDate,
+                    selectedTime = selectedTime,
+                    onDateClick = { showDatePicker() },
+                    onTimeClick = { showTimePicker() },
+                    onSetNow = {
+                        selectedDate = Calendar.getInstance()
+                        selectedTime = Calendar.getInstance()
+                    },
                     suppressed = suppressed, onSuppressedChange = { suppressed = it },
                     settings = settings,
                     validationErrors = validationErrors,
@@ -295,8 +264,10 @@ fun MainScreen(context: Context) {
                                 Toast.makeText(ctx, "Выберите направление и точку в настройках!", Toast.LENGTH_SHORT).show()
                                 return@DetectionTab
                             }
+                            val dateStr = dateFormat.format(selectedDate.time)
+                            val timeStr = timeFormat.format(selectedTime.time)
                             StorageManager.addRecord(ctx, Record(
-                                date = today, time = ct,
+                                date = dateStr, time = timeStr,
                                 direction = settings["direction"]!!, point = settings["point"]!!,
                                 type = type, freqVideo = fv, freqControl = fc,
                                 suppressed = if (suppressed) "ДА" else "НЕТ",
@@ -304,15 +275,12 @@ fun MainScreen(context: Context) {
                             ))
                             refresh()
                             fv = ""; fc = ""; suppressed = false
-                            cd = df.format(Date()); ct = tf.format(Date())
+                            selectedDate = Calendar.getInstance()
+                            selectedTime = Calendar.getInstance()
                             validationErrors = emptyMap()
                             Toast.makeText(ctx, "Сохранено!", Toast.LENGTH_SHORT).show()
                             playSound(R.raw.save_sound)
                         }
-                    },
-                    onSetNow = {
-                        cd = df.format(Date())
-                        ct = tf.format(Date())
                     },
                     lastRecord = records.lastOrNull(),
                     onDelete = { deleteId = it }
@@ -354,16 +322,21 @@ fun DetectionTab(
     expandedType: Boolean, onExpandedTypeChange: (Boolean) -> Unit,
     fv: String, fc: String,
     onFvChange: (String) -> Unit, onFcChange: (String) -> Unit,
-    cd: String, onCdChange: (String) -> Unit,
-    ct: String, onCtChange: (String) -> Unit,
+    selectedDate: Calendar,
+    selectedTime: Calendar,
+    onDateClick: () -> Unit,
+    onTimeClick: () -> Unit,
+    onSetNow: () -> Unit,
     suppressed: Boolean, onSuppressedChange: (Boolean) -> Unit,
     settings: Map<String, String>,
     validationErrors: Map<String, Boolean>,
     onSave: () -> Unit,
-    onSetNow: () -> Unit,
     lastRecord: Record?,
     onDelete: (String) -> Unit
 ) {
+    val dateFormat = SimpleDateFormat("dd.MM.yy", Locale.getDefault())
+    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -412,25 +385,25 @@ fun DetectionTab(
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Дата и время
+        // Дата и время (кликабельные, без маски)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
-                value = cd,
-                onValueChange = onCdChange,
+                value = dateFormat.format(selectedDate.time),
+                onValueChange = {},
+                readOnly = true,
                 label = { Text("Дата") },
-                visualTransformation = DateMask(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).clickable { onDateClick() },
+                enabled = false // чтобы не мигал курсор
             )
             Spacer(modifier = Modifier.width(4.dp))
             IconButton(onClick = onSetNow) { Text("🕒", fontSize = 20.sp) }
             OutlinedTextField(
-                value = ct,
-                onValueChange = onCtChange,
+                value = timeFormat.format(selectedTime.time),
+                onValueChange = {},
+                readOnly = true,
                 label = { Text("Время") },
-                visualTransformation = TimeMask(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).clickable { onTimeClick() },
+                enabled = false
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
