@@ -146,10 +146,44 @@ fun MainScreen(context: Context) {
         }
     }
 
+    // Фильтрация и валидация частот
+    fun onVideoFreqChange(raw: String) {
+        val filtered = raw.filter { it.isDigit() }
+        fv = filtered
+        val errs = validationErrors.toMutableMap()
+        val num = filtered.toIntOrNull()
+        if (filtered.isNotEmpty() && (num == null || num !in 100..12000)) {
+            errs["fv_range"] = true
+        } else {
+            errs.remove("fv_range")
+        }
+        validationErrors = errs
+    }
+    fun onControlFreqChange(raw: String) {
+        val filtered = raw.filter { it.isDigit() }
+        fc = filtered
+        val errs = validationErrors.toMutableMap()
+        val num = filtered.toIntOrNull()
+        if (filtered.isNotEmpty() && (num == null || num !in 100..5000)) {
+            errs["fc_range"] = true
+        } else {
+            errs.remove("fc_range")
+        }
+        validationErrors = errs
+    }
+
     fun validate(): Boolean {
         val errors = mutableMapOf<String, Boolean>()
         if (type.isEmpty()) errors["type"] = true
         if (fv.isEmpty()) errors["fv"] = true
+        else {
+            val num = fv.toIntOrNull()
+            if (num == null || num !in 100..12000) errors["fv_range"] = true
+        }
+        if (fc.isNotEmpty()) {
+            val num = fc.toIntOrNull()
+            if (num == null || num !in 100..5000) errors["fc_range"] = true
+        }
         validationErrors = errors
         return errors.isEmpty()
     }
@@ -234,8 +268,8 @@ fun MainScreen(context: Context) {
                     type = type, onTypeChange = { type = it; validationErrors = validationErrors - "type" },
                     types = types,
                     expandedType = expandedType, onExpandedTypeChange = { expandedType = it },
-                    fv = fv, onFvChange = { fv = it; validationErrors = validationErrors - "fv" },
-                    fc = fc, onFcChange = { fc = it },
+                    fv = fv, onFvChange = { onVideoFreqChange(it) },
+                    fc = fc, onFcChange = { onControlFreqChange(it) },
                     cd = cd, onCdChange = { cd = it },
                     ct = ct, onCtChange = { ct = it },
                     suppressed = suppressed, onSuppressedChange = { suppressed = it },
@@ -339,10 +373,35 @@ fun DetectionTab(
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(fv, onFvChange, label = { Text("Частота видео (МГц)") }, isError = validationErrors["fv"] == true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+
+        // Частота видео с проверкой диапазона
+        OutlinedTextField(
+            value = fv,
+            onValueChange = onFvChange,
+            label = { Text("Частота видео (МГц)") },
+            isError = validationErrors["fv"] == true || validationErrors["fv_range"] == true,
+            supportingText = {
+                if (validationErrors["fv_range"] == true) Text("Допустимый диапазон 100–12000")
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
         Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(fc, onFcChange, label = { Text("Частота управления (МГц)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+
+        // Частота управления с проверкой диапазона (необязательно)
+        OutlinedTextField(
+            value = fc,
+            onValueChange = onFcChange,
+            label = { Text("Частота управления (МГц)") },
+            isError = validationErrors["fc_range"] == true,
+            supportingText = {
+                if (validationErrors["fc_range"] == true) Text("Допустимый диапазон 100–5000")
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
         Spacer(modifier = Modifier.height(8.dp))
+
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(cd, onCdChange, label = { Text("Дата") }, visualTransformation = DateMask(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
             Spacer(modifier = Modifier.width(4.dp))
