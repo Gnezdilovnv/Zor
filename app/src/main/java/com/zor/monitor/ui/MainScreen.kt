@@ -2,11 +2,17 @@ package com.zor.monitor.ui
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.widget.Toast
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,6 +35,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
+// Маска времени ##:##
 class TimeMask : VisualTransformation {
     override fun filter(text: androidx.compose.ui.text.AnnotatedString): TransformedText {
         val raw = text.text.filter { it.isDigit() }.take(4)
@@ -71,6 +78,9 @@ fun MainScreen(context: Context) {
     var expandedType by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var deleteId by remember { mutableStateOf<String?>(null) }
+    var lastReportTime by remember { mutableStateOf(settings["last_report_time"] ?: "") }
+    var isGeneratingReport by remember { mutableStateOf(false) }
+    var validationErrors by remember { mutableStateOf(mapOf<String, Boolean>()) }
 
     val directions = customLists["directions"] ?: emptyList()
     val points = customLists["points"] ?: emptyList()
@@ -82,7 +92,6 @@ fun MainScreen(context: Context) {
     val todayRecords = records.filter { it.date == today }
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("ОБНАРУЖЕНИЕ", "ОТЧЕТ")
 
     fun refresh() { records = StorageManager.loadRecords(ctx) }
 
@@ -100,6 +109,15 @@ fun MainScreen(context: Context) {
         } catch (e: Exception) {
             Toast.makeText(ctx, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    // Валидация на лету
+    fun validate(): Boolean {
+        val errors = mutableMapOf<String, Boolean>()
+        if (type.isEmpty()) errors["type"] = true
+        if (fv.isEmpty()) errors["fv"] = true
+        validationErrors = errors
+        return errors.isEmpty()
     }
 
     if (deleteId != null) {
@@ -138,68 +156,99 @@ fun MainScreen(context: Context) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Zor") },
+                title = { Text("Vzor") }, // <-- ИЗМЕНЕНО
                 actions = { IconButton(onClick = { showSettings = true }) { Text("⚙️", fontSize = 20.sp) } }
             )
-        }
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            TabRow(selectedTabIndex = selectedTab) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
+        },
+        bottomBar = {
+            NavigationBar {
+                listOf("ОБНАРУЖЕНИЕ" to Icons.Default.Warning, "ОТЧЕТ" to Icons.Default.Assessment).forEachIndexed { index, (label, icon) ->
+                    NavigationBarItem(
+                        icon = { Icon(icon, contentDescription = label) },
+                        label = { Text(label) },
                         selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = { Text(title) }
+                        onClick = { selectedTab = index }
                     )
                 }
             }
-            when (selectedTab) {
-                0 -> DetectionTab(
-                    type = type, onTypeChange = { type = it }, types = types,
-                    expandedType = expandedType, onExpandedTypeChange = { expandedType = it },
-                    fv = fv, onFvChange = { fv = it }, fc = fc, onFcChange = { fc = it },
-                    cd = cd, onCdChange = { cd = it }, ct = ct, onCtChange = { ct = it },
-                    suppressed = suppressed, onSuppressedChange = { suppressed = it },
-                    settings = settings,
-                    onSave = {
-                        if (type.isEmpty() || fv.isEmpty()) {
-                            Toast.makeText(ctx, "Заполните тип и частоту видео!", Toast.LENGTH_SHORT).show()
-                            return@DetectionTab
-                        }
-                        if (settings["direction"] == null || settings["point"] == null) {
-                            Toast.makeText(ctx, "Выберите направление и точку в настройках!", Toast.LENGTH_SHORT).show()
-                            return@DetectionTab
-                        }
-                        StorageManager.addRecord(ctx, Record(
-                            date = cd, time = ct,
-                            direction = settings["direction"]!!, point = settings["point"]!!,
-                            type = type, freqVideo = fv, freqControl = fc,
-                            suppressed = if (suppressed) "ДА" else "НЕТ",
-                            voiceText = ""
-                        ))
-                        refresh()
-                        fv = ""; fc = ""; suppressed = false
-                        cd = df.format(Date()); ct = tf.format(Date())
-                        Toast.makeText(ctx, "Сохранено!", Toast.LENGTH_SHORT).show()
-                    },
-                    lastRecord = records.lastOrNull(),
-                    onDelete = { deleteId = it },
-                    isDark = isDark
-                )
-                1 -> ReportTab(
-                    todayRecords = todayRecords,
-                    onSendReport = {
-                        scope.launch {
-                            val p = ReportGenerator.generateReport(ctx, exportFormat, reportPeriod)
-                            if (p != null) {
-                                Toast.makeText(ctx, "Отчёт: $p", Toast.LENGTH_LONG).show()
+        },
+        floatingActionButton = {
+            if (selectedTab == 0) {
+                FloatingActionButton(onClick = {
+                    selectedTab = 0
+                }) {
+                    Icon(Icons.Default.Add, contentDescription = "Добавить")
+                }
+            }
+        }
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Crossfade(targetState = selectedTab) { tab ->
+                when (tab) {
+                    0 -> DetectionTab(
+                        type = type, onTypeChange = { type = it; validationErrors = validationErrors - "type" },
+                        types = types,
+                        expandedType = expandedType, onExpandedTypeChange = { expandedType = it },
+                        fv = fv, onFvChange = { fv = it; validationErrors = validationErrors - "fv" },
+                        fc = fc, onFcChange = { fc = it },
+                        cd = cd, onCdChange = { cd = it },
+                        ct = ct, onCtChange = { ct = it },
+                        suppressed = suppressed, onSuppressedChange = { suppressed = it },
+                        settings = settings,
+                        validationErrors = validationErrors,
+                        onSave = {
+                            if (validate()) {
+                                if (settings["direction"] == null || settings["point"] == null) {
+                                    Toast.makeText(ctx, "Выберите направление и точку в настройках!", Toast.LENGTH_SHORT).show()
+                                    return@DetectionTab
+                                }
+                                StorageManager.addRecord(ctx, Record(
+                                    date = cd, time = ct,
+                                    direction = settings["direction"]!!, point = settings["point"]!!,
+                                    type = type, freqVideo = fv, freqControl = fc,
+                                    suppressed = if (suppressed) "ДА" else "НЕТ",
+                                    voiceText = ""
+                                ))
                                 refresh()
-                                shareFile(p)
-                            } else Toast.makeText(ctx, "Нет новых данных", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    isDark = isDark
-                )
+                                fv = ""; fc = ""; suppressed = false
+                                cd = df.format(Date()); ct = tf.format(Date())
+                                validationErrors = emptyMap()
+                                Toast.makeText(ctx, "Сохранено!", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onSetNow = {
+                            cd = df.format(Date())
+                            ct = tf.format(Date())
+                        },
+                        lastRecord = records.lastOrNull(),
+                        onDelete = { deleteId = it },
+                        isDark = isDark
+                    )
+                    1 -> ReportTab(
+                        todayRecords = todayRecords,
+                        lastReportTime = lastReportTime,
+                        isGenerating = isGeneratingReport,
+                        onSendReport = {
+                            scope.launch {
+                                isGeneratingReport = true
+                                val p = ReportGenerator.generateReport(ctx, exportFormat, reportPeriod)
+                                isGeneratingReport = false
+                                if (p != null) {
+                                    Toast.makeText(ctx, "Отчёт: $p", Toast.LENGTH_LONG).show()
+                                    val now = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
+                                    val updatedSettings = settings.toMutableMap()
+                                    updatedSettings["last_report_time"] = now
+                                    settings = updatedSettings
+                                    StorageManager.saveSettings(ctx, updatedSettings)
+                                    lastReportTime = now
+                                    refresh()
+                                    shareFile(p)
+                                } else Toast.makeText(ctx, "Нет новых данных", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        isDark = isDark
+                    )
+                }
             }
         }
     }
@@ -216,7 +265,9 @@ fun DetectionTab(
     ct: String, onCtChange: (String) -> Unit,
     suppressed: Boolean, onSuppressedChange: (Boolean) -> Unit,
     settings: Map<String, String>,
+    validationErrors: Map<String, Boolean>,
     onSave: () -> Unit,
+    onSetNow: () -> Unit,
     lastRecord: Record?,
     onDelete: (String) -> Unit,
     isDark: Boolean
@@ -230,9 +281,16 @@ fun DetectionTab(
 
         ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = onExpandedTypeChange) {
             OutlinedTextField(
-                value = type, onValueChange = {}, readOnly = true,
+                value = type,
+                onValueChange = {},
+                readOnly = true,
                 label = { Text("Тип") },
+                isError = validationErrors["type"] == true,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = if (validationErrors["type"] == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = if (validationErrors["type"] == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                ),
                 modifier = Modifier.fillMaxWidth().menuAnchor()
             )
             ExposedDropdownMenu(expandedType, { onExpandedTypeChange(false) }) {
@@ -247,26 +305,31 @@ fun DetectionTab(
 
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
-            value = fv, onValueChange = onFvChange,
+            value = fv,
+            onValueChange = onFvChange,
             label = { Text("Частота видео (МГц)") },
+            isError = validationErrors["fv"] == true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
         )
 
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
-            value = fc, onValueChange = onFcChange,
+            value = fc,
+            onValueChange = onFcChange,
             label = { Text("Частота управления (МГц, необязательно)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
         )
 
         Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(value = cd, onValueChange = onCdChange, label = { Text("Дата") }, modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            IconButton(onClick = onSetNow) { Text("🕒") }
             OutlinedTextField(
-                value = ct, onValueChange = onCtChange,
+                value = ct,
+                onValueChange = onCtChange,
                 label = { Text("Время") },
                 visualTransformation = TimeMask(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -312,9 +375,7 @@ fun DetectionTab(
                             fontSize = 14.sp
                         )
                     }
-                    TextButton(onClick = { onDelete(lastRecord.id) }) {
-                        Text("🗑", fontSize = 20.sp)
-                    }
+                    TextButton(onClick = { onDelete(lastRecord.id) }) { Text("🗑", fontSize = 20.sp) }
                 }
             }
         }
@@ -325,6 +386,8 @@ fun DetectionTab(
 @Composable
 fun ReportTab(
     todayRecords: List<Record>,
+    lastReportTime: String,
+    isGenerating: Boolean,
     onSendReport: () -> Unit,
     isDark: Boolean
 ) {
@@ -346,7 +409,16 @@ fun ReportTab(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = onSendReport, modifier = Modifier.fillMaxWidth()) { Text("Отправить отчет") }
+        Spacer(modifier = Modifier.height(16.dp))
+        if (lastReportTime.isNotEmpty()) {
+            Text("Последний отчёт отправлен: $lastReportTime", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        if (isGenerating) {
+            CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+        } else {
+            Button(onClick = onSendReport, modifier = Modifier.fillMaxWidth()) { Text("Отправить отчет") }
+        }
     }
 }
