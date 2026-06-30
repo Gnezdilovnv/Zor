@@ -3,6 +3,7 @@ package com.zor.monitor.ui
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -188,23 +190,32 @@ fun MainScreen(context: Context) {
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Кастомный TabRow
+            // Кастомные вкладки
             TabRow(
                 selectedTabIndex = selectedTab,
-                indicator = {}, // убираем стандартное подчеркивание
-                divider = {}
+                indicator = {},
+                divider = {},
+                backgroundColor = MaterialTheme.colorScheme.surface
             ) {
                 listOf("ОБНАРУЖЕНИЕ", "ОТЧЕТ").forEachIndexed { index, title ->
                     val selected = selectedTab == index
                     Tab(
                         selected = selected,
                         onClick = { selectedTab = index },
-                        modifier = if (!selected) Modifier.border(1.dp, Color.Gray, RoundedCornerShape(4.dp)) else Modifier
+                        modifier = if (selected) {
+                            Modifier
+                                .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(8.dp))
+                        } else {
+                            Modifier
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        }
                     ) {
                         Text(
                             text = title,
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                            fontSize = 16.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                         )
                     }
                 }
@@ -328,9 +339,21 @@ fun DetectionTab(
             OutlinedTextField(ct, onCtChange, label = { Text("Время") }, visualTransformation = TimeMask(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("Подавлен"); Spacer(modifier = Modifier.weight(1f)); Switch(checked = suppressed, onCheckedChange = onSuppressedChange) }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Подавлен")
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = if (suppressed) "ДА" else "НЕТ",
+                fontWeight = FontWeight.Bold,
+                color = if (suppressed) Color(0xFF4CAF50) else Color(0xFFF44336)
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Switch(checked = suppressed, onCheckedChange = onSuppressedChange)
+        }
         Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) { Text("Сохранить") }
+        Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
+            Text("СОХРАНИТЬ", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
 
         if (lastRecord != null) {
             Spacer(modifier = Modifier.height(20.dp))
@@ -349,7 +372,6 @@ fun RecordCard(record: Record, onDelete: () -> Unit, showDelete: Boolean) {
     ) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                // Формат: тип | видео | управление | дд.мм | 00:00
                 Text(
                     text = buildString {
                         append(record.type)
@@ -380,9 +402,12 @@ fun ReportTab(
     onDeleteRecord: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // Закрепленная верхняя часть
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Статистика за сегодня", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        // Закрепленная верхняя часть – выравнивание по центру
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Статистика за сегодня", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -395,19 +420,34 @@ fun ReportTab(
                 }
             }
             if (lastReportTime.isNotEmpty()) {
-                Text("Последний отчёт отправлен: $lastReportTime", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Последний отчёт отправлен: $lastReportTime",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
             Spacer(modifier = Modifier.height(12.dp))
             if (isGenerating) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                CircularProgressIndicator()
             } else {
-                Button(onClick = onSendReport, modifier = Modifier.fillMaxWidth()) { Text("Отправить отчет") }
+                Button(onClick = onSendReport, modifier = Modifier.fillMaxWidth()) {
+                    Text("ОТПРАВИТЬ ОТЧЕТ", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
 
-        // Прокручиваемый список обнаружений за сегодня
+        // Список обнаружений за сегодня
         if (todayRecords.isNotEmpty()) {
-            Text("Обнаружения за сегодня", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp))
+            Text(
+                "Обнаружения за сегодня",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
             Spacer(modifier = Modifier.height(8.dp))
             LazyColumn(
                 modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
@@ -416,7 +456,7 @@ fun ReportTab(
                     RecordCard(
                         record = record,
                         onDelete = { onDeleteRecord(record.id) },
-                        showDelete = !record.exported  // удалить можно только неотправленные
+                        showDelete = !record.exported
                     )
                 }
             }
