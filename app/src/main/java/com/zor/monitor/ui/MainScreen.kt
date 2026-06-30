@@ -120,7 +120,7 @@ fun MainScreen(context: Context) {
     val types = customLists["types"] ?: emptyList()
     val exportFormat = settings["export_format"] ?: "xlsx"
     val reportPeriod = settings["report_period"] ?: "all"
-    val today = SimpleDateFormat("dd.MM.yy", Locale.getDefault()).format(Date())
+    val today = df.format(Date())
     val todayRecords = records.filter { it.date == today }
 
     var selectedTab by remember { mutableIntStateOf(0) }
