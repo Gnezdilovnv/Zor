@@ -29,10 +29,23 @@ class MainActivity : ComponentActivity() {
         val need = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (need.isNotEmpty()) permLauncher.launch(need.toTypedArray()) else schedule()
         setContent {
-            MaterialTheme(colorScheme = if (StorageManager.loadSettings(this)["theme"] == "dark") darkColorScheme() else lightColorScheme()) {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { MainScreen(context = this@MainActivity) }
+            val settings = StorageManager.loadSettings(this)
+            val systemTheme = settings["system_theme"] != "false" // по умолчанию true
+            val colorScheme = when {
+                systemTheme && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> dynamicLightColorScheme(this)
+                systemTheme && !isDarkSystem() -> lightColorScheme()
+                systemTheme && isDarkSystem() -> darkColorScheme()
+                else -> lightColorScheme() // системная тема выключена — всегда светлая
+            }
+            MaterialTheme(colorScheme = colorScheme) {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    MainScreen(context = this@MainActivity)
+                }
             }
         }
+    }
+    private fun isDarkSystem(): Boolean {
+        return resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
     }
     private fun schedule() {
         WorkManager.getInstance(this).cancelAllWorkByTag("report_reminder")
