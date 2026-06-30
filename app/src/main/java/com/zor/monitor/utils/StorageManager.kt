@@ -15,9 +15,9 @@ object StorageManager {
     private const val CUSTOM_KEY = "custom_lists"
     private val gson = Gson()
 
-    // Папки
-    private fun getVzorDir(): File = File(Environment.getExternalStorageDirectory(), "Vzor")
-    private fun getBackupDir(): File = File(getVzorDir(), "Backup")
+    // Папки: Downloads/Vzor и Downloads/Vzor/Backup
+    private fun getVzorDir() = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Vzor")
+    private fun getBackupDir() = File(getVzorDir(), "Backup")
 
     fun loadRecords(context: Context): List<Record> {
         val json = context.getSharedPreferences("app_data", Context.MODE_PRIVATE).getString(RECORDS_KEY, null) ?: return emptyList()
@@ -41,7 +41,6 @@ object StorageManager {
         } catch (_: Exception) {}
     }
 
-    // CSV с новым порядком: дата, время, тип, частота видео, частота управления, подавлен, точка, направление
     fun exportCSV(context: Context, records: List<Record>, baseName: String): File? = try {
         val dir = getVzorDir().also { it.mkdirs() }
         val file = File(dir, "$baseName.csv")

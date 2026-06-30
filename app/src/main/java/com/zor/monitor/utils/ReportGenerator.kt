@@ -11,7 +11,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 object ReportGenerator {
-    private fun getVzorDir(): File = File(Environment.getExternalStorageDirectory(), "Vzor")
+    private fun getVzorDir() = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Vzor")
 
     suspend fun generateReport(context: Context, format: String = "xlsx", period: String = "all"): String? = withContext(Dispatchers.IO) {
         val filtered = filterByPeriod(StorageManager.getUnexportedRecords(context), period)
