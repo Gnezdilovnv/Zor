@@ -29,7 +29,6 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-// Маска для времени ##:##
 class TimeMask : VisualTransformation {
     override fun filter(text: androidx.compose.ui.text.AnnotatedString): TransformedText {
         val raw = text.text.filter { it.isDigit() }.take(4)
@@ -94,18 +93,15 @@ fun MainScreen(context: Context) {
             val mimeType = if (path.endsWith(".csv")) "text/csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             val intent = Intent(Intent.ACTION_SEND).apply {
                 putExtra(Intent.EXTRA_STREAM, uri)
-                setDataAndType(uri, mimeType) // Более надежный способ задать тип
+                setDataAndType(uri, mimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            // Принудительно показываем выбор всегда, даже если есть приложение по умолчанию
-            val chooser = Intent.createChooser(intent, "Поделиться отчётом")
-            ctx.startActivity(chooser)
+            ctx.startActivity(Intent.createChooser(intent, "Поделиться отчётом"))
         } catch (e: Exception) {
             Toast.makeText(ctx, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
-    // Диалог удаления
     if (deleteId != null) {
         AlertDialog(
             onDismissRequest = { deleteId = null },
@@ -122,7 +118,6 @@ fun MainScreen(context: Context) {
         )
     }
 
-    // Экран настроек
     if (showSettings) {
         SettingsScreen(
             settings = settings,
@@ -160,21 +155,11 @@ fun MainScreen(context: Context) {
             }
             when (selectedTab) {
                 0 -> DetectionTab(
-                    type = type,
-                    onTypeChange = { type = it },
-                    types = types,
-                    expandedType = expandedType,
-                    onExpandedTypeChange = { expandedType = it },
-                    fv = fv,
-                    onFvChange = { fv = it },
-                    fc = fc,
-                    onFcChange = { fc = it },
-                    cd = cd,
-                    onCdChange = { cd = it },
-                    ct = ct,
-                    onCtChange = { ct = it },
-                    suppressed = suppressed,
-                    onSuppressedChange = { suppressed = it },
+                    type = type, onTypeChange = { type = it }, types = types,
+                    expandedType = expandedType, onExpandedTypeChange = { expandedType = it },
+                    fv = fv, onFvChange = { fv = it }, fc = fc, onFcChange = { fc = it },
+                    cd = cd, onCdChange = { cd = it }, ct = ct, onCtChange = { ct = it },
+                    suppressed = suppressed, onSuppressedChange = { suppressed = it },
                     settings = settings,
                     onSave = {
                         if (type.isEmpty() || fv.isEmpty()) {
@@ -185,16 +170,13 @@ fun MainScreen(context: Context) {
                             Toast.makeText(ctx, "Выберите направление и точку в настройках!", Toast.LENGTH_SHORT).show()
                             return@DetectionTab
                         }
-                        StorageManager.addRecord(
-                            ctx,
-                            Record(
-                                date = cd, time = ct,
-                                direction = settings["direction"]!!, point = settings["point"]!!,
-                                type = type, freqVideo = fv, freqControl = fc,
-                                suppressed = if (suppressed) "ДА" else "НЕТ",
-                                voiceText = ""
-                            )
-                        )
+                        StorageManager.addRecord(ctx, Record(
+                            date = cd, time = ct,
+                            direction = settings["direction"]!!, point = settings["point"]!!,
+                            type = type, freqVideo = fv, freqControl = fc,
+                            suppressed = if (suppressed) "ДА" else "НЕТ",
+                            voiceText = ""
+                        ))
                         refresh()
                         fv = ""; fc = ""; suppressed = false
                         cd = df.format(Date()); ct = tf.format(Date())
@@ -223,23 +205,16 @@ fun MainScreen(context: Context) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetectionTab(
-    type: String,
-    onTypeChange: (String) -> Unit,
-    types: List<String>,
-    expandedType: Boolean,
-    onExpandedTypeChange: (Boolean) -> Unit,
-    fv: String,
-    onFvChange: (String) -> Unit,
-    fc: String,
-    onFcChange: (String) -> Unit,
-    cd: String,
-    onCdChange: (String) -> Unit,
-    ct: String,
-    onCtChange: (String) -> Unit,
-    suppressed: Boolean,
-    onSuppressedChange: (Boolean) -> Unit,
+    type: String, onTypeChange: (String) -> Unit, types: List<String>,
+    expandedType: Boolean, onExpandedTypeChange: (Boolean) -> Unit,
+    fv: String, onFvChange: (String) -> Unit,
+    fc: String, onFcChange: (String) -> Unit,
+    cd: String, onCdChange: (String) -> Unit,
+    ct: String, onCtChange: (String) -> Unit,
+    suppressed: Boolean, onSuppressedChange: (Boolean) -> Unit,
     settings: Map<String, String>,
     onSave: () -> Unit,
     lastRecord: Record?,
@@ -247,10 +222,7 @@ fun DetectionTab(
     isDark: Boolean
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("Новое обнаружение", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -258,9 +230,7 @@ fun DetectionTab(
 
         ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = onExpandedTypeChange) {
             OutlinedTextField(
-                value = type,
-                onValueChange = {},
-                readOnly = true,
+                value = type, onValueChange = {}, readOnly = true,
                 label = { Text("Тип") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
                 modifier = Modifier.fillMaxWidth().menuAnchor()
@@ -277,8 +247,7 @@ fun DetectionTab(
 
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
-            value = fv,
-            onValueChange = onFvChange,
+            value = fv, onValueChange = onFvChange,
             label = { Text("Частота видео (МГц)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
@@ -286,8 +255,7 @@ fun DetectionTab(
 
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
-            value = fc,
-            onValueChange = onFcChange,
+            value = fc, onValueChange = onFcChange,
             label = { Text("Частота управления (МГц, необязательно)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
@@ -295,16 +263,10 @@ fun DetectionTab(
 
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(
-                value = cd,
-                onValueChange = onCdChange,
-                label = { Text("Дата") },
-                modifier = Modifier.weight(1f)
-            )
+            OutlinedTextField(value = cd, onValueChange = onCdChange, label = { Text("Дата") }, modifier = Modifier.weight(1f))
             Spacer(modifier = Modifier.width(8.dp))
             OutlinedTextField(
-                value = ct,
-                onValueChange = onCtChange,
+                value = ct, onValueChange = onCtChange,
                 label = { Text("Время") },
                 visualTransformation = TimeMask(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -313,19 +275,14 @@ fun DetectionTab(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Подавлен")
             Spacer(modifier = Modifier.weight(1f))
             Switch(checked = suppressed, onCheckedChange = onSuppressedChange)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
-            Text("Сохранить")
-        }
+        Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) { Text("Сохранить") }
 
         if (lastRecord != null) {
             Spacer(modifier = Modifier.height(20.dp))
@@ -364,6 +321,7 @@ fun DetectionTab(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportTab(
     todayRecords: List<Record>,
@@ -371,10 +329,7 @@ fun ReportTab(
     isDark: Boolean
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("Статистика за сегодня", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -392,9 +347,6 @@ fun ReportTab(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
-
-        Button(onClick = onSendReport, modifier = Modifier.fillMaxWidth()) {
-            Text("Отправить отчет")
-        }
+        Button(onClick = onSendReport, modifier = Modifier.fillMaxWidth()) { Text("Отправить отчет") }
     }
 }
