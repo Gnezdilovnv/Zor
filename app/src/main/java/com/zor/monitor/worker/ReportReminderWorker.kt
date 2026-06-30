@@ -8,8 +8,22 @@ import java.util.*
 
 class ReportReminderWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): Result {
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        return if (StorageManager.loadRecords(applicationContext).any { it.date == today && it.exported }) Result.success()
-        else { NotificationHelper.show(applicationContext); Result.success() }
+        val records = StorageManager.loadRecords(applicationContext)
+        val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.getDefault())
+        val todayFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val today = todayFormat.format(Date())
+
+        // Уведомление, если есть хотя бы одна неэкспортированная запись за сегодня
+        val needsReminder = records.any { rec ->
+            try {
+                val date = inputFormat.parse(rec.date) ?: return@any false
+                todayFormat.format(date) == today && !rec.exported
+            } catch (_: Exception) { false }
+        }
+
+        if (needsReminder) {
+            NotificationHelper.show(applicationContext)
+        }
+        return Result.success()
     }
 }

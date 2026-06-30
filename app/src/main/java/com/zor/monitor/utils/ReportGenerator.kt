@@ -37,13 +37,40 @@ object ReportGenerator {
 
     private fun filterByPeriod(records: List<com.zor.monitor.models.Record>, period: String): List<com.zor.monitor.models.Record> {
         if (period == "all") return records
+
+        // Парсеры: из dd.MM.yy -> Date -> yyyy-MM-dd для сравнения
+        val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.getDefault())
+        val comparableFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val cal = Calendar.getInstance()
-        val df = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val today = df.format(cal.time)
+        val today = comparableFormat.format(cal.time)      // yyyy-MM-dd
+
         return when (period) {
-            "today" -> records.filter { it.date == today }
-            "week" -> { cal.add(Calendar.DAY_OF_YEAR, -7); records.filter { it.date >= df.format(cal.time) } }
-            "month" -> { cal.add(Calendar.DAY_OF_YEAR, -30); records.filter { it.date >= df.format(cal.time) } }
+            "today" -> records.filter {
+                try {
+                    val date = inputFormat.parse(it.date) ?: return@filter false
+                    comparableFormat.format(date) == today
+                } catch (_: Exception) { false }
+            }
+            "week" -> {
+                cal.add(Calendar.DAY_OF_YEAR, -7)
+                val weekAgo = comparableFormat.format(cal.time)
+                records.filter {
+                    try {
+                        val date = inputFormat.parse(it.date) ?: return@filter false
+                        comparableFormat.format(date) >= weekAgo
+                    } catch (_: Exception) { false }
+                }
+            }
+            "month" -> {
+                cal.add(Calendar.DAY_OF_YEAR, -30)
+                val monthAgo = comparableFormat.format(cal.time)
+                records.filter {
+                    try {
+                        val date = inputFormat.parse(it.date) ?: return@filter false
+                        comparableFormat.format(date) >= monthAgo
+                    } catch (_: Exception) { false }
+                }
+            }
             else -> records
         }
     }
@@ -69,8 +96,6 @@ object ReportGenerator {
             val pub = File(vzorDir, filename)
             file.copyTo(pub, overwrite = true)
             return pub
-        } catch (_: Exception) {
-            return null
-        }
+        } catch (_: Exception) { return null }
     }
 }
