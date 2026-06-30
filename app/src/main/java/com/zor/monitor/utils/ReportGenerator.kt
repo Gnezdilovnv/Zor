@@ -22,15 +22,17 @@ object ReportGenerator {
         val datePart = SimpleDateFormat("dd.MM.yy", Locale.getDefault()).format(now)
         val timePart = SimpleDateFormat("HH.mm", Locale.getDefault()).format(now)
         val baseName = "${datePart}_${timePart}_$direction"
-        if (format == "csv") {
-            val f = StorageManager.exportCSV(context, filtered, baseName)
-            if (f != null) {
-                StorageManager.markAsExported(context, filtered.map { it.id })
-                return@withContext f.absolutePath
-            }
-            return@withContext null
+
+        val file = when (format) {
+            "csv" -> StorageManager.exportCSV(context, filtered, baseName)
+            "json" -> StorageManager.exportJSON(context, filtered, baseName)
+            else -> generateXlsx(context, filtered, baseName)
         }
-        generateXlsx(context, filtered, baseName)
+        if (file != null) {
+            StorageManager.markAsExported(context, filtered.map { it.id })
+            return@withContext file.absolutePath
+        }
+        null
     }
 
     private fun filterByPeriod(records: List<com.zor.monitor.models.Record>, period: String): List<com.zor.monitor.models.Record> {
@@ -46,26 +48,29 @@ object ReportGenerator {
         }
     }
 
-    private fun generateXlsx(context: Context, records: List<com.zor.monitor.models.Record>, baseName: String): String {
+    private fun generateXlsx(context: Context, records: List<com.zor.monitor.models.Record>, baseName: String): File? {
         val filename = "$baseName.xlsx"
         val cacheDir = File(context.cacheDir, "reports").also { it.mkdirs() }
         val file = File(cacheDir, filename)
-        val wb = XSSFWorkbook()
-        val sheet = wb.createSheet("Данные")
-        val headers = listOf("Дата","Время","Тип","Частота видео","Частота управления","Подавлен","Точка","Направление")
-        val headerRow = sheet.createRow(0)
-        headers.forEachIndexed { i, h -> headerRow.createCell(i).setCellValue(h) }
-        records.forEachIndexed { i, r ->
-            val row = sheet.createRow(i + 1)
-            listOf(r.date, r.time, r.type, r.freqVideo, r.freqControl, r.suppressed, r.point, r.direction)
-                .forEachIndexed { j, v -> row.createCell(j).setCellValue(v) }
+        try {
+            val wb = XSSFWorkbook()
+            val sheet = wb.createSheet("Данные")
+            val headers = listOf("Дата","Время","Тип","Частота видео","Частота управления","Подавлен","Точка","Направление")
+            val headerRow = sheet.createRow(0)
+            headers.forEachIndexed { i, h -> headerRow.createCell(i).setCellValue(h) }
+            records.forEachIndexed { i, r ->
+                val row = sheet.createRow(i + 1)
+                listOf(r.date, r.time, r.type, r.freqVideo, r.freqControl, r.suppressed, r.point, r.direction)
+                    .forEachIndexed { j, v -> row.createCell(j).setCellValue(v) }
+            }
+            FileOutputStream(file).use { wb.write(it) }
+            wb.close()
+            val vzorDir = getVzorDir().also { it.mkdirs() }
+            val pub = File(vzorDir, filename)
+            file.copyTo(pub, overwrite = true)
+            return pub
+        } catch (_: Exception) {
+            return null
         }
-        FileOutputStream(file).use { wb.write(it) }
-        wb.close()
-        val vzorDir = getVzorDir().also { it.mkdirs() }
-        val pub = File(vzorDir, filename)
-        file.copyTo(pub, overwrite = true)
-        StorageManager.markAsExported(context, records.map { it.id })
-        return pub.absolutePath
     }
 }

@@ -15,7 +15,6 @@ object StorageManager {
     private const val CUSTOM_KEY = "custom_lists"
     private val gson = Gson()
 
-    // Папки: Downloads/Vzor и Downloads/Vzor/Backup
     private fun getVzorDir() = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Vzor")
     private fun getBackupDir() = File(getVzorDir(), "Backup")
 
@@ -25,22 +24,23 @@ object StorageManager {
     }
     fun saveRecords(context: Context, records: List<Record>) {
         context.getSharedPreferences("app_data", Context.MODE_PRIVATE).edit().putString(RECORDS_KEY, gson.toJson(records)).apply()
-        backupToFile(context, records)
+        backupToFile(records)
     }
     fun addRecord(context: Context, record: Record) { saveRecords(context, loadRecords(context).toMutableList().also { it.add(record) }) }
     fun deleteRecord(context: Context, id: String) { saveRecords(context, loadRecords(context).filter { it.id != id }) }
     fun getUnexportedRecords(context: Context) = loadRecords(context).filter { !it.exported }
     fun markAsExported(context: Context, ids: List<String>) { saveRecords(context, loadRecords(context).map { if (it.id in ids) it.copy(exported = true) else it }) }
 
-    private fun backupToFile(context: Context, records: List<Record>) {
+    // Единый бэкап: всегда пишем в backup.json (перезапись)
+    private fun backupToFile(records: List<Record>) {
         try {
             val dir = getBackupDir().also { it.mkdirs() }
-            val df = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-            File(dir, "backup_${df.format(Date())}.json").writeText(gson.toJson(records))
-            dir.listFiles()?.sortedByDescending { it.lastModified() }?.drop(5)?.forEach { it.delete() }
+            val file = File(dir, "backup.json")
+            file.writeText(gson.toJson(records))
         } catch (_: Exception) {}
     }
 
+    // Экспорт CSV
     fun exportCSV(context: Context, records: List<Record>, baseName: String): File? = try {
         val dir = getVzorDir().also { it.mkdirs() }
         val file = File(dir, "$baseName.csv")
@@ -48,6 +48,14 @@ object StorageManager {
             w.write("Дата,Время,Тип,Частота видео,Частота управления,Подавлен,Точка,Направление\n")
             records.forEach { r -> w.write("\"${r.date}\",\"${r.time}\",\"${r.type}\",\"${r.freqVideo}\",\"${r.freqControl}\",\"${r.suppressed}\",\"${r.point}\",\"${r.direction}\"\n") }
         }; file
+    } catch (_: Exception) { null }
+
+    // Экспорт JSON
+    fun exportJSON(context: Context, records: List<Record>, baseName: String): File? = try {
+        val dir = getVzorDir().also { it.mkdirs() }
+        val file = File(dir, "$baseName.json")
+        file.writeText(gson.toJson(records))
+        file
     } catch (_: Exception) { null }
 
     fun loadSettings(context: Context): Map<String, String> {
