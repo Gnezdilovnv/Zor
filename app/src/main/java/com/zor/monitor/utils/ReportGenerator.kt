@@ -11,37 +11,57 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 object ReportGenerator {
-    suspend fun generateReport(context: Context, format: String = "xlsx", period: String = "all"): String? = withContext(Dispatchers.IO) {
-        val filtered = filterByPeriod(StorageManager.getUnexportedRecords(context), period)
-        if (filtered.isEmpty()) return@withContext null
-        if (format == "csv") { val f = StorageManager.exportCSV(context, filtered); if (f != null) { StorageManager.markAsExported(context, filtered.map { it.id }); return@withContext f.absolutePath } return@withContext null }
-        generateXlsx(context, filtered)
+    suspend fun generateReport(c: Context, f: String = "xlsx", p: String = "all"): String? = withContext(Dispatchers.IO) {
+        val flt = filter(StorageManager.getUnexportedRecords(c), p)
+        if (flt.isEmpty()) return@withContext null
+        if (f == "csv") {
+            val ff = StorageManager.exportCSV(c, flt)
+            if (ff != null) {
+                StorageManager.markAsExported(c, flt.map { it.id })
+                return@withContext ff.absolutePath
+            }
+            return@withContext null
+        }
+        generateXlsx(c, flt)
     }
-    private fun filterByPeriod(records: List<com.zor.monitor.models.Record>, period: String): List<com.zor.monitor.models.Record> {
-        if (period == "all") return records
-        val cal = Calendar.getInstance(); val df = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()); val today = df.format(cal.time)
-        return when (period) {
-            "today" -> records.filter { it.date == today }
-            "week" -> { cal.add(Calendar.DAY_OF_YEAR, -7); records.filter { it.date >= df.format(cal.time) } }
-            "month" -> { cal.add(Calendar.DAY_OF_YEAR, -30); records.filter { it.date >= df.format(cal.time) } }
-            else -> records
+
+    private fun filter(r: List<com.zor.monitor.models.Record>, p: String): List<com.zor.monitor.models.Record> {
+        if (p == "all") return r
+        val cal = Calendar.getInstance()
+        val df = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val t = df.format(cal.time)
+        return when (p) {
+            "today" -> r.filter { it.date == t }
+            "week" -> {
+                cal.add(Calendar.DAY_OF_YEAR, -7)
+                r.filter { it.date >= df.format(cal.time) }
+            }
+            "month" -> {
+                cal.add(Calendar.DAY_OF_YEAR, -30)
+                r.filter { it.date >= df.format(cal.time) }
+            }
+            else -> r
         }
     }
-    private fun generateXlsx(context: Context, records: List<com.zor.monitor.models.Record>): String {
-        val df = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-        val filename = "отчёт_${df.format(Date())}.xlsx"
-        val dir = File(context.cacheDir, "reports").also { it.mkdirs() }
-        val file = File(dir, filename)
-        val wb = XSSFWorkbook(); val sheet = wb.createSheet("Данные")
-        listOf("Дата","Время","Направление","Точка","Тип","Частота видео","Частота управления","Подавлен","Голосовой ввод").forEachIndexed { i, h -> sheet.createRow(0).createCell(i).setCellValue(h) }
-        records.forEachIndexed { i, r ->
-            val row = sheet.createRow(i + 1)
-            listOf(r.date, r.time, r.direction, r.point, r.type, r.freqVideo, r.freqControl, r.suppressed, r.voiceText).forEachIndexed { j, v -> row.createCell(j).setCellValue(v) }
+
+    private fun generateXlsx(c: Context, r: List<com.zor.monitor.models.Record>): String {
+        val fn = "отчёт_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.xlsx"
+        val d = File(c.cacheDir, "reports").also { it.mkdirs() }
+        val ff = File(d, fn)
+        val wb = XSSFWorkbook()
+        val s = wb.createSheet("Данные")
+        listOf("Дата","Время","Направление","Точка","Тип","Частота видео","Частота управления","Подавлен","Голосовой ввод")
+            .forEachIndexed { i, h -> s.createRow(0).createCell(i).setCellValue(h) }
+        r.forEachIndexed { i, v ->
+            val row = s.createRow(i + 1)
+            listOf(v.date, v.time, v.direction, v.point, v.type, v.freqVideo, v.freqControl, v.suppressed, v.voiceText)
+                .forEachIndexed { j, x -> row.createCell(j).setCellValue(x) }
         }
-        FileOutputStream(file).use { wb.write(it) }; wb.close()
-        val pub = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), filename)
-        file.copyTo(pub, overwrite = true)
-        StorageManager.markAsExported(context, records.map { it.id })
+        FileOutputStream(ff).use { wb.write(it) }
+        wb.close()
+        val pub = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fn)
+        ff.copyTo(pub, true)
+        StorageManager.markAsExported(c, r.map { it.id })
         return pub.absolutePath
     }
 }
