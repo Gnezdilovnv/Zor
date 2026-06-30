@@ -209,14 +209,82 @@ fun MainScreen(context: Context) {
                 }
             }
             when (selectedTab) {
-                0 -> DetectionTab(...)   // полный код DetectionTab ниже
-                1 -> ReportTab(...)      // полный код ReportTab ниже
+                0 -> DetectionTab(
+                    type = type, onTypeChange = { type = it; validationErrors = validationErrors - "type" },
+                    types = types,
+                    expandedType = expandedType, onExpandedTypeChange = { expandedType = it },
+                    fv = fv, fc = fc,
+                    onFvChange = { raw ->
+                        val (digits, err) = cleanFreqInput(raw, 100, 12000)
+                        fv = digits
+                        if (err != null) validationErrors = validationErrors + ("fv_range" to true)
+                        else validationErrors = validationErrors - "fv_range"
+                    },
+                    onFcChange = { raw ->
+                        val (digits, err) = cleanFreqInput(raw, 100, 5000)
+                        fc = digits
+                        if (err != null) validationErrors = validationErrors + ("fc_range" to true)
+                        else validationErrors = validationErrors - "fc_range"
+                    },
+                    cd = cd, onCdChange = { cd = it },
+                    ct = ct, onCtChange = { ct = it },
+                    onSetNow = {
+                        cd = df.format(Date())
+                        ct = tf.format(Date())
+                    },
+                    suppressed = suppressed, onSuppressedChange = { suppressed = it },
+                    settings = settings,
+                    validationErrors = validationErrors,
+                    onSave = {
+                        if (validate()) {
+                            StorageManager.addRecord(ctx, Record(
+                                date = cd, time = ct,
+                                direction = settings["direction"]!!, point = settings["point"]!!,
+                                type = type, freqVideo = fv, freqControl = fc,
+                                suppressed = if (suppressed) "ДА" else "НЕТ",
+                                voiceText = ""
+                            ))
+                            refresh()
+                            fv = ""; fc = ""; suppressed = false
+                            cd = df.format(Date()); ct = tf.format(Date())
+                            validationErrors = emptyMap()
+                            Toast.makeText(ctx, "Сохранено!", Toast.LENGTH_SHORT).show()
+                            playSound(R.raw.save_sound)
+                        }
+                    },
+                    lastRecord = records.lastOrNull(),
+                    onDelete = { deleteId = it }
+                )
+                1 -> ReportTab(
+                    todayRecords = todayRecords,
+                    lastReportTime = lastReportTime,
+                    isGenerating = isGeneratingReport,
+                    onSendReport = {
+                        scope.launch {
+                            isGeneratingReport = true
+                            val p = ReportGenerator.generateReport(ctx, exportFormat, reportPeriod)
+                            isGeneratingReport = false
+                            if (p != null) {
+                                Toast.makeText(ctx, "Отчёт: $p", Toast.LENGTH_LONG).show()
+                                val now = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
+                                val updatedSettings = settings.toMutableMap()
+                                updatedSettings["last_report_time"] = now
+                                settings = updatedSettings
+                                StorageManager.saveSettings(ctx, updatedSettings)
+                                lastReportTime = now
+                                refresh()
+                                shareFile(p)
+                                playSound(R.raw.report_sound)
+                            } else Toast.makeText(ctx, "Нет новых данных", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onDeleteRecord = { deleteId = it }
+                )
             }
         }
     }
 }
 
-// ---------- DetectionTab ----------
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetectionTab(
@@ -338,7 +406,6 @@ fun RecordCard(record: Record, onDelete: () -> Unit, showDelete: Boolean) {
     }
 }
 
-// ---------- ReportTab ----------
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportTab(
