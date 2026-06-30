@@ -2,6 +2,7 @@ package com.zor.monitor.ui
 
 import android.content.Context
 import android.content.Intent
+import android.media.MediaPlayer
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import com.zor.monitor.R
 import com.zor.monitor.models.Record
 import com.zor.monitor.utils.ReportGenerator
 import com.zor.monitor.utils.StorageManager
@@ -35,7 +37,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-// Маски
+// Маски даты и времени
 class DateMask : VisualTransformation {
     override fun filter(text: androidx.compose.ui.text.AnnotatedString): TransformedText {
         val raw = text.text.filter { it.isDigit() }.take(8)
@@ -120,6 +122,14 @@ fun MainScreen(context: Context) {
 
     fun refresh() { records = StorageManager.loadRecords(ctx) }
 
+    fun playSound(resId: Int) {
+        try {
+            val mp = MediaPlayer.create(ctx, resId)
+            mp?.start()
+            mp?.setOnCompletionListener { it.release() }
+        } catch (_: Exception) {}
+    }
+
     fun shareFile(path: String) {
         try {
             val file = File(path)
@@ -190,7 +200,6 @@ fun MainScreen(context: Context) {
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Кастомные вкладки
             TabRow(
                 selectedTabIndex = selectedTab,
                 indicator = {},
@@ -250,6 +259,7 @@ fun MainScreen(context: Context) {
                             cd = df.format(Date()); ct = tf.format(Date())
                             validationErrors = emptyMap()
                             Toast.makeText(ctx, "Сохранено!", Toast.LENGTH_SHORT).show()
+                            playSound(R.raw.save_sound)
                         }
                     },
                     onSetNow = {
@@ -278,6 +288,7 @@ fun MainScreen(context: Context) {
                                 lastReportTime = now
                                 refresh()
                                 shareFile(p)
+                                playSound(R.raw.report_sound)
                             } else Toast.makeText(ctx, "Нет новых данных", Toast.LENGTH_SHORT).show()
                         }
                     },
@@ -359,7 +370,11 @@ fun DetectionTab(
             Spacer(modifier = Modifier.height(20.dp))
             Text("Последняя запись", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
-            RecordCard(record = lastRecord, onDelete = { onDelete(lastRecord.id) }, showDelete = true)
+            RecordCard(
+                record = lastRecord,
+                onDelete = { onDelete(lastRecord.id) },
+                showDelete = !lastRecord.exported
+            )
         }
     }
 }
@@ -402,7 +417,6 @@ fun ReportTab(
     onDeleteRecord: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // Закрепленная верхняя часть – выравнивание по центру
         Column(
             modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -439,7 +453,6 @@ fun ReportTab(
             }
         }
 
-        // Список обнаружений за сегодня
         if (todayRecords.isNotEmpty()) {
             Text(
                 "Обнаружения за сегодня",
