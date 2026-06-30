@@ -2,14 +2,10 @@ package com.zor.monitor.ui
 
 import android.content.Context
 import android.content.Intent
-import android.speech.RecognizerIntent
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -28,6 +28,30 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+
+// Маска для времени ##:##
+class TimeMask : VisualTransformation {
+    override fun filter(text: androidx.compose.ui.text.AnnotatedString): TransformedText {
+        val raw = text.text.filter { it.isDigit() }.take(4)
+        val formatted = when {
+            raw.length >= 3 -> "${raw.substring(0, 2)}:${raw.substring(2)}"
+            raw.length == 2 -> "${raw}:"
+            else -> raw
+        }
+        val offsetMapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int {
+                if (offset <= 1) return offset
+                if (offset == 2) return 3
+                return offset + 1
+            }
+            override fun transformedToOriginal(offset: Int): Int {
+                if (offset <= 2) return offset
+                return offset - 1
+            }
+        }
+        return TransformedText(androidx.compose.ui.text.AnnotatedString(formatted), offsetMapping)
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,7 +71,6 @@ fun MainScreen(context: Context) {
     var ct by remember { mutableStateOf(tf.format(Date())) }
     var expandedType by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var voiceText by remember { mutableStateOf("") }
     var deleteId by remember { mutableStateOf<String?>(null) }
 
     val directions = customLists["directions"] ?: emptyList()
@@ -56,30 +79,11 @@ fun MainScreen(context: Context) {
     val isDark = settings["theme"] == "dark"
     val exportFormat = settings["export_format"] ?: "xlsx"
     val reportPeriod = settings["report_period"] ?: "all"
-    val typeColors = mapOf(
-        "FPV" to Color(0xFFFF9800), "DJI" to Color(0xFF2196F3),
-        "Яга" to Color(0xFFFF5722), "Крыло" to Color(0xFF4CAF50),
-        "Радар" to Color(0xFF9C27B0), "Радар ударный" to Color(0xFFE91E63),
-        "Перехватчик" to Color(0xFF00BCD4)
-    )
     val today = df.format(Date())
     val todayRecords = records.filter { it.date == today }
 
-    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) {
-            voiceText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() ?: ""
-            val words = voiceText.lowercase().split(" ")
-            words.forEachIndexed { i, w ->
-                when {
-                    types.any { it.lowercase() == w } -> type = types.first { it.lowercase() == w }
-                    w == "подавлен" || w == "подавлена" -> suppressed = true
-                    w == "активен" || w == "активна" -> suppressed = false
-                    w.matches(Regex("\\d{3,5}")) && i == words.indexOfFirst { it.matches(Regex("\\d{3,5}")) } -> fv = w
-                    w.matches(Regex("\\d{3,5}")) && i != words.indexOfFirst { it.matches(Regex("\\d{3,5}")) } -> fc = w
-                }
-            }
-        }
-    }
+    var selectedTab by remember { mutableIntStateOf(0) }
+    val tabs = listOf("ОБНАРУЖЕНИЕ", "ОТЧЕТ")
 
     fun refresh() { records = StorageManager.loadRecords(ctx) }
 
@@ -89,7 +93,7 @@ fun MainScreen(context: Context) {
             val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
             val mimeType = if (path.endsWith(".csv")) "text/csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = mimeType  // Здесь type - свойство Intent, оно не затронет переменную type
+                type = mimeType
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
@@ -99,6 +103,7 @@ fun MainScreen(context: Context) {
         }
     }
 
+    // Диалог удаления
     if (deleteId != null) {
         AlertDialog(
             onDismissRequest = { deleteId = null },
@@ -115,6 +120,7 @@ fun MainScreen(context: Context) {
         )
     }
 
+    // Экран настроек
     if (showSettings) {
         SettingsScreen(
             settings = settings,
@@ -140,132 +146,253 @@ fun MainScreen(context: Context) {
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            TabRow(selectedTabIndex = selectedTab) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index },
+                        text = { Text(title) }
+                    )
+                }
+            }
+            when (selectedTab) {
+                0 -> DetectionTab(
+                    type = type,
+                    onTypeChange = { type = it },
+                    types = types,
+                    expandedType = expandedType,
+                    onExpandedTypeChange = { expandedType = it },
+                    fv = fv,
+                    onFvChange = { fv = it },
+                    fc = fc,
+                    onFcChange = { fc = it },
+                    cd = cd,
+                    onCdChange = { cd = it },
+                    ct = ct,
+                    onCtChange = { ct = it },
+                    suppressed = suppressed,
+                    onSuppressedChange = { suppressed = it },
+                    settings = settings,
+                    onSave = {
+                        if (type.isEmpty() || fv.isEmpty()) {
+                            Toast.makeText(ctx, "Заполните тип и частоту видео!", Toast.LENGTH_SHORT).show()
+                            return@DetectionTab
+                        }
+                        if (settings["direction"] == null || settings["point"] == null) {
+                            Toast.makeText(ctx, "Выберите направление и точку в настройках!", Toast.LENGTH_SHORT).show()
+                            return@DetectionTab
+                        }
+                        StorageManager.addRecord(
+                            ctx,
+                            Record(
+                                date = cd, time = ct,
+                                direction = settings["direction"]!!, point = settings["point"]!!,
+                                type = type, freqVideo = fv, freqControl = fc,
+                                suppressed = if (suppressed) "ДА" else "НЕТ",
+                                voiceText = ""
+                            )
+                        )
+                        refresh()
+                        fv = ""; fc = ""; suppressed = false
+                        cd = df.format(Date()); ct = tf.format(Date())
+                        Toast.makeText(ctx, "Сохранено!", Toast.LENGTH_SHORT).show()
+                    },
+                    lastRecord = records.lastOrNull(),
+                    onDelete = { deleteId = it },
+                    isDark = isDark
+                )
+                1 -> ReportTab(
+                    todayRecords = todayRecords,
+                    onSendReport = {
+                        scope.launch {
+                            val p = ReportGenerator.generateReport(ctx, exportFormat, reportPeriod)
+                            if (p != null) {
+                                Toast.makeText(ctx, "Отчёт: $p", Toast.LENGTH_LONG).show()
+                                refresh()
+                                shareFile(p)
+                            } else Toast.makeText(ctx, "Нет новых данных", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    isDark = isDark
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DetectionTab(
+    type: String,
+    onTypeChange: (String) -> Unit,
+    types: List<String>,
+    expandedType: Boolean,
+    onExpandedTypeChange: (Boolean) -> Unit,
+    fv: String,
+    onFvChange: (String) -> Unit,
+    fc: String,
+    onFcChange: (String) -> Unit,
+    cd: String,
+    onCdChange: (String) -> Unit,
+    ct: String,
+    onCtChange: (String) -> Unit,
+    suppressed: Boolean,
+    onSuppressedChange: (Boolean) -> Unit,
+    settings: Map<String, String>,
+    onSave: () -> Unit,
+    lastRecord: Record?,
+    onDelete: (String) -> Unit,
+    isDark: Boolean
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Новое обнаружение", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = onExpandedTypeChange) {
+            OutlinedTextField(
+                value = type,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Тип") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
+                modifier = Modifier.fillMaxWidth().menuAnchor()
+            )
+            ExposedDropdownMenu(expandedType, { onExpandedTypeChange(false) }) {
+                types.forEach { t ->
+                    DropdownMenuItem(text = { Text(t) }, onClick = {
+                        onTypeChange(t)
+                        onExpandedTypeChange(false)
+                    })
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = fv,
+            onValueChange = onFvChange,
+            label = { Text("Частота видео (МГц)") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = fc,
+            onValueChange = onFcChange,
+            label = { Text("Частота управления (МГц, необязательно)") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = cd,
+                onValueChange = onCdChange,
+                label = { Text("Дата") },
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            OutlinedTextField(
+                value = ct,
+                onValueChange = onCtChange,
+                label = { Text("Время") },
+                visualTransformation = TimeMask(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Text("Подавлен")
+            Spacer(modifier = Modifier.weight(1f))
+            Switch(checked = suppressed, onCheckedChange = onSuppressedChange)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
+            Text("Сохранить")
+        }
+
+        if (lastRecord != null) {
+            Spacer(modifier = Modifier.height(20.dp))
+            Text("Последняя запись", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF37474F) else Color(0xFFE3F2FD))
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("📊 Статистика за сегодня", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text("Всего: ${todayRecords.size}  |  ✅ ${todayRecords.count { it.suppressed == "НЕТ" }}  |  ⚠️ ${todayRecords.count { it.suppressed == "ДА" }}", fontSize = 13.sp)
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Последние записи", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            if (records.isEmpty()) Text("Нет записей", style = MaterialTheme.typography.bodySmall)
-            else LazyColumn(modifier = Modifier.fillMaxWidth().height(180.dp)) {
-                items(records.takeLast(20).reversed()) { rec ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = when {
-                                rec.suppressed == "ДА" -> Color(0xFFFFCDD2)
-                                rec.exported -> if (isDark) Color(0xFF37474F) else Color(0xFFECEFF1)
-                                else -> typeColors[rec.type]?.copy(alpha = 0.15f) ?: Color(0xFFFFFFFF)
-                            }
-                        )
-                    ) {
-                        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    buildString {
-                                        append(if (rec.exported) "✅" else "🔄")
-                                        append(" ${rec.date} ${rec.time} | ${rec.type} | В:${rec.freqVideo} У:${rec.freqControl} | ")
-                                        append(if (rec.suppressed == "ДА") "⚠️ Подавлен" else "✅ Активен")
-                                        if (rec.voiceText.isNotEmpty()) append(" | 🎤:${rec.voiceText.take(30)}")
-                                    },
-                                    fontSize = 11.sp
-                                )
-                            }
-                            TextButton(onClick = { deleteId = rec.id }) { Text("🗑", fontSize = 16.sp) }
-                        }
+                colors = CardDefaults.cardColors(
+                    containerColor = when {
+                        lastRecord.suppressed == "ДА" -> Color(0xFFFFCDD2)
+                        else -> Color(0xFFECEFF1)
                     }
-                }
-            }
-            Divider(modifier = Modifier.padding(vertical = 8.dp))
-            Text("Новая запись", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = {
-                    voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Тип, частота видео, частота управления, подавлен/активен")
-                    })
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF607D8B))
-            ) { Text("🎤 Голосовой ввод") }
-            if (voiceText.isNotEmpty()) Text("🎤: $voiceText", fontSize = 11.sp, color = Color.Gray)
-            Spacer(modifier = Modifier.height(8.dp))
-            ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = { expandedType = it }) {
-                OutlinedTextField(
-                    type, {}, readOnly = true, label = { Text("Тип") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
-                    modifier = Modifier.fillMaxWidth().menuAnchor()
                 )
-                ExposedDropdownMenu(expandedType, { expandedType = false }) {
-                    types.forEach { t ->
-                        DropdownMenuItem(text = { Text(t) }, onClick = { type = t; expandedType = false })
+            ) {
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = buildString {
+                                append(if (lastRecord.exported) "✅" else "ℹ️")
+                                append(" ${lastRecord.date} ${lastRecord.time}")
+                                append(" | ${lastRecord.type}")
+                                append(" | В:${lastRecord.freqVideo}")
+                                if (lastRecord.freqControl.isNotEmpty()) append(" У:${lastRecord.freqControl}")
+                                append(" | ")
+                                append(if (lastRecord.suppressed == "ДА") "🟢 Подавлен" else "🔴 Активен")
+                            },
+                            fontSize = 14.sp
+                        )
+                    }
+                    TextButton(onClick = { onDelete(lastRecord.id) }) {
+                        Text("🗑", fontSize = 20.sp)
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(fv, { fv = it }, label = { Text("Частота видео (МГц)") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(fc, { fc = it }, label = { Text("Частота управления (МГц)") }, modifier = Modifier.fillMaxWidth())
-            Row(modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(cd, { cd = it }, label = { Text("Дата") }, modifier = Modifier.weight(1f))
-                Spacer(modifier = Modifier.width(8.dp))
-                OutlinedTextField(ct, { ct = it }, label = { Text("Время") }, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+fun ReportTab(
+    todayRecords: List<Record>,
+    onSendReport: () -> Unit,
+    isDark: Boolean
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Статистика за сегодня", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF37474F) else Color(0xFFE3F2FD))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Всего записей: ${todayRecords.size}", fontSize = 16.sp)
+                Text("🟢 Подавлено: ${todayRecords.count { it.suppressed == "ДА" }}", fontSize = 16.sp)
+                Text("🔴 Активных: ${todayRecords.count { it.suppressed == "НЕТ" }}", fontSize = 16.sp)
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Подавлен")
-                Spacer(modifier = Modifier.weight(1f))
-                Switch(suppressed, { suppressed = it })
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                Button(onClick = {
-                    if (type.isEmpty() || fv.isEmpty() || fc.isEmpty()) {
-                        Toast.makeText(ctx, "Заполните поля!", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    if (settings["direction"] == null || settings["point"] == null) {
-                        Toast.makeText(ctx, "Выберите направление и точку!", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    StorageManager.addRecord(
-                        ctx,
-                        Record(
-                            date = cd, time = ct,
-                            direction = settings["direction"]!!, point = settings["point"]!!,
-                            type = type, freqVideo = fv, freqControl = fc,
-                            suppressed = if (suppressed) "ДА" else "НЕТ",
-                            voiceText = voiceText
-                        )
-                    )
-                    refresh()
-                    fv = ""; fc = ""; suppressed = false
-                    cd = df.format(Date()); ct = tf.format(Date()); voiceText = ""
-                    Toast.makeText(ctx, "Сохранено!", Toast.LENGTH_SHORT).show()
-                }, modifier = Modifier.weight(1f)) { Text("Сохранить") }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = {
-                    scope.launch {
-                        val p = ReportGenerator.generateReport(ctx, exportFormat, reportPeriod)
-                        if (p != null) {
-                            Toast.makeText(ctx, "Отчёт: $p", Toast.LENGTH_LONG).show()
-                            refresh()
-                            shareFile(p)  // Теперь переменная type не пострадает
-                        } else Toast.makeText(ctx, "Нет новых данных", Toast.LENGTH_SHORT).show()
-                    }
-                }, modifier = Modifier.weight(1f)) { Text("Отчёт") }
-            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(onClick = onSendReport, modifier = Modifier.fillMaxWidth()) {
+            Text("Отправить отчет")
         }
     }
 }
