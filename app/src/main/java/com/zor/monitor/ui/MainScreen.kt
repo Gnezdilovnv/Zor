@@ -11,7 +11,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -111,7 +111,6 @@ fun MainScreen(context: Context) {
         }
     }
 
-    // Валидация на лету
     fun validate(): Boolean {
         val errors = mutableMapOf<String, Boolean>()
         if (type.isEmpty()) errors["type"] = true
@@ -156,13 +155,13 @@ fun MainScreen(context: Context) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Vzor") }, // <-- ИЗМЕНЕНО
+                title = { Text("Vzor") },
                 actions = { IconButton(onClick = { showSettings = true }) { Text("⚙️", fontSize = 20.sp) } }
             )
         },
         bottomBar = {
             NavigationBar {
-                listOf("ОБНАРУЖЕНИЕ" to Icons.Default.Warning, "ОТЧЕТ" to Icons.Default.Assessment).forEachIndexed { index, (label, icon) ->
+                listOf("ОБНАРУЖЕНИЕ" to Icons.Default.Warning, "ОТЧЕТ" to Icons.Default.Description).forEachIndexed { index, (label, icon) ->
                     NavigationBarItem(
                         icon = { Icon(icon, contentDescription = label) },
                         label = { Text(label) },
@@ -174,9 +173,7 @@ fun MainScreen(context: Context) {
         },
         floatingActionButton = {
             if (selectedTab == 0) {
-                FloatingActionButton(onClick = {
-                    selectedTab = 0
-                }) {
+                FloatingActionButton(onClick = { selectedTab = 0 }) {
                     Icon(Icons.Default.Add, contentDescription = "Добавить")
                 }
             }
