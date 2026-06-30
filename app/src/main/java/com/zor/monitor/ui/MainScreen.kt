@@ -9,10 +9,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -161,9 +157,9 @@ fun MainScreen(context: Context) {
         },
         bottomBar = {
             NavigationBar {
-                listOf("ОБНАРУЖЕНИЕ" to Icons.Default.Warning, "ОТЧЕТ" to Icons.Default.Description).forEachIndexed { index, (label, icon) ->
+                listOf("ОБНАРУЖЕНИЕ", "ОТЧЕТ").forEachIndexed { index, label ->
                     NavigationBarItem(
-                        icon = { Icon(icon, contentDescription = label) },
+                        icon = { /* пусто */ },
                         label = { Text(label) },
                         selected = selectedTab == index,
                         onClick = { selectedTab = index }
@@ -174,7 +170,7 @@ fun MainScreen(context: Context) {
         floatingActionButton = {
             if (selectedTab == 0) {
                 FloatingActionButton(onClick = { selectedTab = 0 }) {
-                    Icon(Icons.Default.Add, contentDescription = "Добавить")
+                    Text("+")
                 }
             }
         }
