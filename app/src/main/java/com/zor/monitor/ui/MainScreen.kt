@@ -1,7 +1,5 @@
 package com.zor.monitor.ui
 
-import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
@@ -24,8 +22,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,6 +41,57 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
+// Маски даты и времени (стабильные версии)
+class DateMask : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val digits = text.text.filter { it.isDigit() }.take(8)
+        val formatted = buildString {
+            for (i in digits.indices) {
+                append(digits[i])
+                if (i == 1 || i == 3) append('.')
+            }
+        }
+        val offsetMapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int {
+                if (offset <= 1) return offset
+                if (offset <= 3) return offset + 1
+                if (offset <= 5) return offset + 2
+                return minOf(offset + 2, formatted.length)
+            }
+            override fun transformedToOriginal(offset: Int): Int {
+                if (offset <= 2) return offset
+                if (offset <= 5) return offset - 1
+                return maxOf(offset - 2, 0)
+            }
+        }
+        return TransformedText(AnnotatedString(formatted), offsetMapping)
+    }
+}
+
+class TimeMask : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val digits = text.text.filter { it.isDigit() }.take(4)
+        val formatted = when {
+            digits.length >= 3 -> "${digits.substring(0, 2)}:${digits.substring(2)}"
+            digits.length == 2 -> "${digits}:"
+            else -> digits
+        }
+        val offsetMapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int {
+                if (offset <= 1) return offset
+                if (offset == 2) return 3
+                if (offset >= 3) return offset + 1
+                return offset
+            }
+            override fun transformedToOriginal(offset: Int): Int {
+                if (offset <= 2) return offset
+                return offset - 1
+            }
+        }
+        return TransformedText(AnnotatedString(formatted), offsetMapping)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(context: Context) {
@@ -51,10 +104,10 @@ fun MainScreen(context: Context) {
     var fv by remember { mutableStateOf("") }
     var fc by remember { mutableStateOf("") }
     var suppressed by remember { mutableStateOf(false) }
-    val dateFormat = remember { SimpleDateFormat("dd.MM.yy", Locale.getDefault()) }
-    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
-    var selectedTime by remember { mutableStateOf(Calendar.getInstance()) }
+    val df = remember { SimpleDateFormat("dd.MM.yy", Locale.getDefault()) }
+    val tf = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    var cd by remember { mutableStateOf(df.format(Date())) }
+    var ct by remember { mutableStateOf(tf.format(Date())) }
     var expandedType by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var deleteId by remember { mutableStateOf<String?>(null) }
@@ -67,8 +120,8 @@ fun MainScreen(context: Context) {
     val types = customLists["types"] ?: emptyList()
     val exportFormat = settings["export_format"] ?: "xlsx"
     val reportPeriod = settings["report_period"] ?: "all"
-    val todayDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-    val todayRecords = records.filter { it.date == todayDate }
+    val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    val todayRecords = records.filter { it.date == today }
 
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -127,23 +180,6 @@ fun MainScreen(context: Context) {
         return errors.isEmpty()
     }
 
-    // Диалоги даты и времени
-    fun showDatePicker() {
-        val cal = selectedDate
-        DatePickerDialog(ctx, { _, year, month, day ->
-            cal.set(year, month, day)
-            selectedDate = cal
-        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
-    }
-    fun showTimePicker() {
-        val cal = selectedTime
-        TimePickerDialog(ctx, { _, hour, minute ->
-            cal.set(Calendar.HOUR_OF_DAY, hour)
-            cal.set(Calendar.MINUTE, minute)
-            selectedTime = cal
-        }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
-    }
-
     if (deleteId != null) {
         AlertDialog(
             onDismissRequest = { deleteId = null },
@@ -182,11 +218,7 @@ fun MainScreen(context: Context) {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_logo),
-                            contentDescription = "Logo",
-                            modifier = Modifier.size(28.dp)
-                        )
+                        Image(painter = painterResource(id = R.drawable.ic_logo), contentDescription = "Logo", modifier = Modifier.size(28.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("VZOR", fontWeight = FontWeight.Bold)
                     }
@@ -247,13 +279,11 @@ fun MainScreen(context: Context) {
                         if (err != null) validationErrors = validationErrors + ("fc_range" to true)
                         else validationErrors = validationErrors - "fc_range"
                     },
-                    selectedDate = selectedDate,
-                    selectedTime = selectedTime,
-                    onDateClick = { showDatePicker() },
-                    onTimeClick = { showTimePicker() },
+                    cd = cd, onCdChange = { cd = it },
+                    ct = ct, onCtChange = { ct = it },
                     onSetNow = {
-                        selectedDate = Calendar.getInstance()
-                        selectedTime = Calendar.getInstance()
+                        cd = df.format(Date())
+                        ct = tf.format(Date())
                     },
                     suppressed = suppressed, onSuppressedChange = { suppressed = it },
                     settings = settings,
@@ -264,10 +294,8 @@ fun MainScreen(context: Context) {
                                 Toast.makeText(ctx, "Выберите направление и точку в настройках!", Toast.LENGTH_SHORT).show()
                                 return@DetectionTab
                             }
-                            val dateStr = dateFormat.format(selectedDate.time)
-                            val timeStr = timeFormat.format(selectedTime.time)
                             StorageManager.addRecord(ctx, Record(
-                                date = dateStr, time = timeStr,
+                                date = cd, time = ct,
                                 direction = settings["direction"]!!, point = settings["point"]!!,
                                 type = type, freqVideo = fv, freqControl = fc,
                                 suppressed = if (suppressed) "ДА" else "НЕТ",
@@ -275,8 +303,7 @@ fun MainScreen(context: Context) {
                             ))
                             refresh()
                             fv = ""; fc = ""; suppressed = false
-                            selectedDate = Calendar.getInstance()
-                            selectedTime = Calendar.getInstance()
+                            cd = df.format(Date()); ct = tf.format(Date())
                             validationErrors = emptyMap()
                             Toast.makeText(ctx, "Сохранено!", Toast.LENGTH_SHORT).show()
                             playSound(R.raw.save_sound)
@@ -322,10 +349,8 @@ fun DetectionTab(
     expandedType: Boolean, onExpandedTypeChange: (Boolean) -> Unit,
     fv: String, fc: String,
     onFvChange: (String) -> Unit, onFcChange: (String) -> Unit,
-    selectedDate: Calendar,
-    selectedTime: Calendar,
-    onDateClick: () -> Unit,
-    onTimeClick: () -> Unit,
+    cd: String, onCdChange: (String) -> Unit,
+    ct: String, onCtChange: (String) -> Unit,
     onSetNow: () -> Unit,
     suppressed: Boolean, onSuppressedChange: (Boolean) -> Unit,
     settings: Map<String, String>,
@@ -334,9 +359,6 @@ fun DetectionTab(
     lastRecord: Record?,
     onDelete: (String) -> Unit
 ) {
-    val dateFormat = SimpleDateFormat("dd.MM.yy", Locale.getDefault())
-    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -351,7 +373,7 @@ fun DetectionTab(
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = if (validationErrors["type"] == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = if (validationErrors["type"] == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                    unfocusedBorderColor = if (validationErrors["type"] == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 ),
                 modifier = Modifier.fillMaxWidth().menuAnchor()
             )
@@ -361,7 +383,6 @@ fun DetectionTab(
         }
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Частота видео
         OutlinedTextField(
             value = fv,
             onValueChange = onFvChange,
@@ -373,7 +394,6 @@ fun DetectionTab(
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Частота управления
         OutlinedTextField(
             value = fc,
             onValueChange = onFcChange,
@@ -385,25 +405,25 @@ fun DetectionTab(
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Дата и время (кликабельные, без маски)
+        // Ручной ввод даты и времени с масками
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
-                value = dateFormat.format(selectedDate.time),
-                onValueChange = {},
-                readOnly = true,
+                value = cd,
+                onValueChange = onCdChange,
                 label = { Text("Дата") },
-                modifier = Modifier.weight(1f).clickable { onDateClick() },
-                enabled = false // чтобы не мигал курсор
+                visualTransformation = DateMask(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f)
             )
             Spacer(modifier = Modifier.width(4.dp))
             IconButton(onClick = onSetNow) { Text("🕒", fontSize = 20.sp) }
             OutlinedTextField(
-                value = timeFormat.format(selectedTime.time),
-                onValueChange = {},
-                readOnly = true,
+                value = ct,
+                onValueChange = onCtChange,
                 label = { Text("Время") },
-                modifier = Modifier.weight(1f).clickable { onTimeClick() },
-                enabled = false
+                visualTransformation = TimeMask(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f)
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -491,7 +511,7 @@ fun ReportTab(
                 Text(
                     "Последний отчёт отправлен: $lastReportTime",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
