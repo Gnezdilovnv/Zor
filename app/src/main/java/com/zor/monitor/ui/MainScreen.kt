@@ -93,13 +93,15 @@ fun MainScreen(context: Context) {
             val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
             val mimeType = if (path.endsWith(".csv")) "text/csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = mimeType
                 putExtra(Intent.EXTRA_STREAM, uri)
+                setDataAndType(uri, mimeType) // Более надежный способ задать тип
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            ctx.startActivity(Intent.createChooser(intent, "Поделиться отчётом"))
+            // Принудительно показываем выбор всегда, даже если есть приложение по умолчанию
+            val chooser = Intent.createChooser(intent, "Поделиться отчётом")
+            ctx.startActivity(chooser)
         } catch (e: Exception) {
-            Toast.makeText(ctx, "Ошибка", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
