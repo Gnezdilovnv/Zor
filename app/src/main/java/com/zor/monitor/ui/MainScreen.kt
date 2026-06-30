@@ -195,7 +195,7 @@ fun MainScreen(context: Context) {
                 selectedTabIndex = selectedTab,
                 indicator = {},
                 divider = {},
-                backgroundColor = MaterialTheme.colorScheme.surface
+                containerColor = MaterialTheme.colorScheme.surface
             ) {
                 listOf("ОБНАРУЖЕНИЕ", "ОТЧЕТ").forEachIndexed { index, title ->
                     val selected = selectedTab == index

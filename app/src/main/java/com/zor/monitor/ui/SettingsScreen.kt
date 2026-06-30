@@ -7,8 +7,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,14 +43,12 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Системная тема
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Системная тема", modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                 Switch(checked = systemTheme, onCheckedChange = { systemTheme = it })
             }
             Divider()
 
-            // Формат и Период
             listOf(
                 Triple("Формат", { ef }, { fmt }) to listOf("Excel" to "xlsx", "CSV" to "csv"),
                 Triple("Период", { epr }, { period }) to listOf("Сегодня" to "today", "Неделя" to "week", "Месяц" to "month", "Всё" to "all")
@@ -74,7 +74,6 @@ fun SettingsScreen(
             }
             Divider()
 
-            // Направление и точка
             ExposedDropdownMenuBox(expanded = ed, onExpandedChange = { ed = it }) {
                 OutlinedTextField(sd, {}, readOnly = true, label = { Text("Направление", textAlign = TextAlign.Center) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(ed) },
@@ -108,7 +107,9 @@ fun SettingsScreen(
                         "directions" to edir.split("\n").map { it.trim() }.filter { it.isNotEmpty() },
                         "points" to epts.split("\n").map { it.trim() }.filter { it.isNotEmpty() })
                 )
-            }, modifier = Modifier.fillMaxWidth()) { Text("СОХРАНИТЬ", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text("СОХРАНИТЬ", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
