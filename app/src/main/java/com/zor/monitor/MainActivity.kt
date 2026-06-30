@@ -35,27 +35,21 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                MainScreen(context = this@MainActivity)
+                MainScreen()
             }
         }
     }
 
     private fun schedule() {
         WorkManager.getInstance(this).cancelAllWorkByTag("report_reminder")
-
-        // Часовой пояс системы
         val calendar = Calendar.getInstance(TimeZone.getDefault())
         calendar.set(Calendar.HOUR_OF_DAY, 16)
         calendar.set(Calendar.MINUTE, 0)
         calendar.set(Calendar.SECOND, 0)
         calendar.set(Calendar.MILLISECOND, 0)
-        if (calendar.before(Calendar.getInstance())) {
-            calendar.add(Calendar.DAY_OF_YEAR, 1)
-        }
+        if (calendar.before(Calendar.getInstance())) calendar.add(Calendar.DAY_OF_YEAR, 1)
 
         val initialDelay = calendar.timeInMillis - System.currentTimeMillis()
-
-        // Периодическая задача раз в 24 часа
         val reminderRequest = PeriodicWorkRequestBuilder<ReportReminderWorker>(1, TimeUnit.DAYS)
             .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
             .setConstraints(Constraints.Builder().setRequiresBatteryNotLow(false).build())
