@@ -3,10 +3,12 @@ package com.zor.monitor.ui
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -31,14 +33,14 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-// Маски для даты и времени
+// Маски
 class DateMask : VisualTransformation {
     override fun filter(text: androidx.compose.ui.text.AnnotatedString): TransformedText {
         val raw = text.text.filter { it.isDigit() }.take(8)
         val formatted = buildString {
             for (i in raw.indices) {
                 append(raw[i])
-                if (i == 1 || i == 3) append('.') // после дд и мм
+                if (i == 1 || i == 3) append('.')
             }
         }
         val offsetMapping = object : OffsetMapping {
@@ -174,25 +176,37 @@ fun MainScreen(context: Context) {
     }
 
     Scaffold(
-        bottomBar = {
-            BottomAppBar {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Vzor", style = MaterialTheme.typography.titleMedium)
+        topBar = {
+            TopAppBar(
+                title = { Text("VZOR", fontWeight = FontWeight.Bold) },
+                actions = {
                     IconButton(onClick = { showSettings = true }) {
-                        Text("⚙️", fontSize = 20.sp)
+                        Text("☰", fontSize = 22.sp)
                     }
                 }
-            }
+            )
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            TabRow(selectedTabIndex = selectedTab) {
+            // Кастомный TabRow
+            TabRow(
+                selectedTabIndex = selectedTab,
+                indicator = {}, // убираем стандартное подчеркивание
+                divider = {}
+            ) {
                 listOf("ОБНАРУЖЕНИЕ", "ОТЧЕТ").forEachIndexed { index, title ->
+                    val selected = selectedTab == index
                     Tab(
-                        selected = selectedTab == index,
+                        selected = selected,
                         onClick = { selectedTab = index },
-                        text = { Text(title) }
-                    )
+                        modifier = if (!selected) Modifier.border(1.dp, Color.Gray, RoundedCornerShape(4.dp)) else Modifier
+                    ) {
+                        Text(
+                            text = title,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                        )
+                    }
                 }
             }
             when (selectedTab) {
@@ -255,7 +269,8 @@ fun MainScreen(context: Context) {
                                 shareFile(p)
                             } else Toast.makeText(ctx, "Нет новых данных", Toast.LENGTH_SHORT).show()
                         }
-                    }
+                    },
+                    onDeleteRecord = { deleteId = it }
                 )
             }
         }
@@ -288,11 +303,8 @@ fun DetectionTab(
 
         ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = onExpandedTypeChange) {
             OutlinedTextField(
-                value = type,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Тип") },
-                isError = validationErrors["type"] == true,
+                value = type, onValueChange = {}, readOnly = true,
+                label = { Text("Тип") }, isError = validationErrors["type"] == true,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = if (validationErrors["type"] == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
@@ -301,63 +313,22 @@ fun DetectionTab(
                 modifier = Modifier.fillMaxWidth().menuAnchor()
             )
             ExposedDropdownMenu(expandedType, { onExpandedTypeChange(false) }) {
-                types.forEach { t ->
-                    DropdownMenuItem(text = { Text(t) }, onClick = {
-                        onTypeChange(t)
-                        onExpandedTypeChange(false)
-                    })
-                }
+                types.forEach { t -> DropdownMenuItem(text = { Text(t) }, onClick = { onTypeChange(t); onExpandedTypeChange(false) }) }
             }
         }
-
         Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
-            value = fv,
-            onValueChange = onFvChange,
-            label = { Text("Частота видео (МГц)") },
-            isError = validationErrors["fv"] == true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
-        )
-
+        OutlinedTextField(fv, onFvChange, label = { Text("Частота видео (МГц)") }, isError = validationErrors["fv"] == true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
-            value = fc,
-            onValueChange = onFcChange,
-            label = { Text("Частота управления (МГц)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
-        )
-
+        OutlinedTextField(fc, onFcChange, label = { Text("Частота управления (МГц)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = cd,
-                onValueChange = onCdChange,
-                label = { Text("Дата") },
-                visualTransformation = DateMask(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
+            OutlinedTextField(cd, onCdChange, label = { Text("Дата") }, visualTransformation = DateMask(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
             Spacer(modifier = Modifier.width(4.dp))
             IconButton(onClick = onSetNow) { Text("🕒") }
-            OutlinedTextField(
-                value = ct,
-                onValueChange = onCtChange,
-                label = { Text("Время") },
-                visualTransformation = TimeMask(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
+            OutlinedTextField(ct, onCtChange, label = { Text("Время") }, visualTransformation = TimeMask(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
         }
-
         Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Подавлен")
-            Spacer(modifier = Modifier.weight(1f))
-            Switch(checked = suppressed, onCheckedChange = onSuppressedChange)
-        }
-
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("Подавлен"); Spacer(modifier = Modifier.weight(1f)); Switch(checked = suppressed, onCheckedChange = onSuppressedChange) }
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) { Text("Сохранить") }
 
@@ -365,32 +336,35 @@ fun DetectionTab(
             Spacer(modifier = Modifier.height(20.dp))
             Text("Последняя запись", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = when {
-                        lastRecord.suppressed == "ДА" -> Color(0xFFFFCDD2)
-                        else -> Color(0xFFECEFF1)
-                    }
+            RecordCard(record = lastRecord, onDelete = { onDelete(lastRecord.id) }, showDelete = true)
+        }
+    }
+}
+
+@Composable
+fun RecordCard(record: Record, onDelete: () -> Unit, showDelete: Boolean) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = when { record.suppressed == "ДА" -> Color(0xFFFFCDD2) else -> Color(0xFFECEFF1) })
+    ) {
+        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                // Формат: тип | видео | управление | дд.мм | 00:00
+                Text(
+                    text = buildString {
+                        append(record.type)
+                        append(" | В:${record.freqVideo}")
+                        if (record.freqControl.isNotEmpty()) append(" У:${record.freqControl}")
+                        append(" | ${record.date} | ${record.time}")
+                        append(" | ")
+                        append(if (record.suppressed == "ДА") "🟢 Подавлен" else "🔴 Активен")
+                        if (record.exported) append(" ✅")
+                    },
+                    fontSize = 14.sp
                 )
-            ) {
-                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = buildString {
-                                append(if (lastRecord.exported) "✅" else "ℹ️")
-                                append(" ${lastRecord.date} ${lastRecord.time}")
-                                append(" | ${lastRecord.type}")
-                                append(" | В:${lastRecord.freqVideo}")
-                                if (lastRecord.freqControl.isNotEmpty()) append(" У:${lastRecord.freqControl}")
-                                append(" | ")
-                                append(if (lastRecord.suppressed == "ДА") "🟢 Подавлен" else "🔴 Активен")
-                            },
-                            fontSize = 14.sp
-                        )
-                    }
-                    TextButton(onClick = { onDelete(lastRecord.id) }) { Text("🗑", fontSize = 20.sp) }
-                }
+            }
+            if (showDelete) {
+                TextButton(onClick = onDelete) { Text("🗑", fontSize = 20.sp) }
             }
         }
     }
@@ -402,68 +376,52 @@ fun ReportTab(
     todayRecords: List<Record>,
     lastReportTime: String,
     isGenerating: Boolean,
-    onSendReport: () -> Unit
+    onSendReport: () -> Unit,
+    onDeleteRecord: (String) -> Unit
 ) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text("Статистика за сегодня", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Всего записей: ${todayRecords.size}", fontSize = 16.sp)
-                Text("🟢 Подавлено: ${todayRecords.count { it.suppressed == "ДА" }}", fontSize = 16.sp)
-                Text("🔴 Активных: ${todayRecords.count { it.suppressed == "НЕТ" }}", fontSize = 16.sp)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        if (lastReportTime.isNotEmpty()) {
-            Text("Последний отчёт отправлен: $lastReportTime", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Закрепленная верхняя часть
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Статистика за сегодня", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        if (isGenerating) {
-            CircularProgressIndicator(modifier = Modifier.padding(16.dp))
-        } else {
-            Button(onClick = onSendReport, modifier = Modifier.fillMaxWidth()) { Text("Отправить отчет") }
-        }
-
-        if (todayRecords.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("Обнаружения за сегодня", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
-            todayRecords.forEach { record ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = when {
-                            record.suppressed == "ДА" -> Color(0xFFFFCDD2)
-                            else -> Color(0xFFECEFF1)
-                        }
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = buildString {
-                                append(if (record.exported) "✅" else "ℹ️")
-                                append(" ${record.date} ${record.time}")
-                                append(" | ${record.type}")
-                                append(" | В:${record.freqVideo}")
-                                if (record.freqControl.isNotEmpty()) append(" У:${record.freqControl}")
-                                append(" | ")
-                                append(if (record.suppressed == "ДА") "🟢 Подавлен" else "🔴 Активен")
-                            },
-                            fontSize = 14.sp
-                        )
-                    }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Всего записей: ${todayRecords.size}", fontSize = 16.sp)
+                    Text("🟢 Подавлено: ${todayRecords.count { it.suppressed == "ДА" }}", fontSize = 16.sp)
+                    Text("🔴 Активных: ${todayRecords.count { it.suppressed == "НЕТ" }}", fontSize = 16.sp)
                 }
             }
+            if (lastReportTime.isNotEmpty()) {
+                Text("Последний отчёт отправлен: $lastReportTime", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            if (isGenerating) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+            } else {
+                Button(onClick = onSendReport, modifier = Modifier.fillMaxWidth()) { Text("Отправить отчет") }
+            }
+        }
+
+        // Прокручиваемый список обнаружений за сегодня
+        if (todayRecords.isNotEmpty()) {
+            Text("Обнаружения за сегодня", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            LazyColumn(
+                modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
+            ) {
+                items(todayRecords) { record ->
+                    RecordCard(
+                        record = record,
+                        onDelete = { onDeleteRecord(record.id) },
+                        showDelete = !record.exported  // удалить можно только неотправленные
+                    )
+                }
+            }
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
         }
     }
 }
