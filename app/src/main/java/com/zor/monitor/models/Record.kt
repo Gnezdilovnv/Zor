@@ -5,7 +5,7 @@ import java.util.UUID
 
 data class Record(
     val id: String = UUID.randomUUID().toString(),
-    val date: String = "",
+    val date: String = "",                      // dd.MM.yy (для UI)
     val time: String = "",
     val direction: String = "",
     val point: String = "",
@@ -14,5 +14,6 @@ data class Record(
     @SerializedName("freq_control") val freqControl: String = "",
     val suppressed: String = "НЕТ",
     val exported: Boolean = false,
-    val voiceText: String = ""
+    val voiceText: String = "",
+    val isoDate: String = ""                    // yyyy-MM-dd (для сравнений)
 )

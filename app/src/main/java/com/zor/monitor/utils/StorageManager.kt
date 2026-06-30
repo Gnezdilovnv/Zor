@@ -22,16 +22,35 @@ object StorageManager {
         val json = context.getSharedPreferences("app_data", Context.MODE_PRIVATE).getString(RECORDS_KEY, null) ?: return emptyList()
         return gson.fromJson(json, object : TypeToken<List<Record>>() {}.type)
     }
+
     fun saveRecords(context: Context, records: List<Record>) {
         context.getSharedPreferences("app_data", Context.MODE_PRIVATE).edit().putString(RECORDS_KEY, gson.toJson(records)).apply()
         backupToFile(records)
     }
-    fun addRecord(context: Context, record: Record) { saveRecords(context, loadRecords(context).toMutableList().also { it.add(record) }) }
-    fun deleteRecord(context: Context, id: String) { saveRecords(context, loadRecords(context).filter { it.id != id }) }
-    fun getUnexportedRecords(context: Context) = loadRecords(context).filter { !it.exported }
-    fun markAsExported(context: Context, ids: List<String>) { saveRecords(context, loadRecords(context).map { if (it.id in ids) it.copy(exported = true) else it }) }
 
-    // Единый бэкап: всегда пишем в backup.json (перезапись)
+    fun addRecord(context: Context, record: Record) {
+        val records = loadRecords(context).toMutableList()
+        records.add(record)
+        saveRecords(context, records)
+    }
+
+    fun deleteRecord(context: Context, id: String) {
+        val records = loadRecords(context).filter { it.id != id }
+        saveRecords(context, records)
+    }
+
+    fun getUnexportedRecords(context: Context) = loadRecords(context).filter { !it.exported }
+
+    // Атомарное обновление exported
+    fun markAsExported(context: Context, ids: List<String>) {
+        synchronized(this) {
+            val records = loadRecords(context).map { r ->
+                if (r.id in ids) r.copy(exported = true) else r
+            }
+            saveRecords(context, records)
+        }
+    }
+
     private fun backupToFile(records: List<Record>) {
         try {
             val dir = getBackupDir().also { it.mkdirs() }
@@ -40,7 +59,7 @@ object StorageManager {
         } catch (_: Exception) {}
     }
 
-    // Экспорт CSV
+    // Экспорт CSV (без изменений)
     fun exportCSV(context: Context, records: List<Record>, baseName: String): File? = try {
         val dir = getVzorDir().also { it.mkdirs() }
         val file = File(dir, "$baseName.csv")
@@ -57,6 +76,29 @@ object StorageManager {
         file.writeText(gson.toJson(records))
         file
     } catch (_: Exception) { null }
+
+    // Экспорт XLSX — теперь тоже в Vzor
+    fun exportXLSX(context: Context, records: List<Record>, baseName: String): File? {
+        try {
+            val dir = getVzorDir().also { it.mkdirs() }
+            val file = File(dir, "$baseName.xlsx")
+            file.outputStream().use { fos ->
+                val wb = org.apache.poi.xssf.usermodel.XSSFWorkbook()
+                val sheet = wb.createSheet("Данные")
+                val headers = listOf("Дата","Время","Тип","Частота видео","Частота управления","Подавлен","Точка","Направление")
+                val headerRow = sheet.createRow(0)
+                headers.forEachIndexed { i, h -> headerRow.createCell(i).setCellValue(h) }
+                records.forEachIndexed { i, r ->
+                    val row = sheet.createRow(i + 1)
+                    listOf(r.date, r.time, r.type, r.freqVideo, r.freqControl, r.suppressed, r.point, r.direction)
+                        .forEachIndexed { j, v -> row.createCell(j).setCellValue(v) }
+                }
+                wb.write(fos)
+                wb.close()
+            }
+            return file
+        } catch (_: Exception) { return null }
+    }
 
     fun loadSettings(context: Context): Map<String, String> {
         val json = context.getSharedPreferences("app_data", Context.MODE_PRIVATE).getString(SETTINGS_KEY, null) ?: return getDefaultSettings()
