@@ -108,6 +108,7 @@ class TimeMask : VisualTransformation {
     }
 }
 
+// Сегментированный контрол для статуса
 @Composable
 fun SegmentedControl(
     options: List<String>,
@@ -663,12 +664,7 @@ fun RecordCard(record: Record, onDelete: () -> Unit, showDelete: Boolean) {
                 Text(statusLabel, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = borderColor), modifier = Modifier.padding(end = 8.dp))
                 if (showDelete) {
                     IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            imageVector = Icons.Filled.Delete,
-                            contentDescription = "Удалить",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Icon(Icons.Filled.Delete, "Удалить", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

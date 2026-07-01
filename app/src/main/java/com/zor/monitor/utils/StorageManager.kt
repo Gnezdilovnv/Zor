@@ -23,30 +23,8 @@ object StorageManager {
         val json = context.getSharedPreferences("app_data", Context.MODE_PRIVATE)
             .getString(RECORDS_KEY, null) ?: return emptyList()
         return try {
-            val list = gson.fromJson(json, object : TypeToken<List<Record>>() {}.type) as List<Record>
-            // Конвертация старых записей: если поле status отсутствует, используем suppressed
-            list.map { record ->
-                if (record.status.isEmpty() || record.status.isBlank()) {
-                    // Если suppressed == true -> "ПОДАВЛЕН", иначе "АКТИВЕН"
-                    // Но чтобы не потерять данные, можно проверить наличие поля suppressed через рефлексию,
-                    // но проще считать, что если status пустой, то это старая запись.
-                    // Мы не можем получить suppressed из JSON напрямую, но можем попытаться прочитать.
-                    // В Record.kt мы заменили suppressed на status, поэтому при десериализации старое поле suppressed будет проигнорировано.
-                    // Значит, нам нужно где-то хранить suppressed отдельно. Для простоты сделаем так:
-                    // если status пустой, то считаем, что запись активна (по умолчанию).
-                    // Но чтобы не потерять старые данные, лучше добавить в Record поле suppressed с аннотацией @SerializedName,
-                    // но мы убрали. Альтернативно, можно при загрузке проверить наличие поля suppressed через JsonElement.
-                    // Для упрощения будем считать, что все старые записи активны (так как в старом дизайне подавлен был только если true).
-                    // Но это не совсем верно. Поскольку мы меняем структуру, лучше сделать миграцию: при первом запуске преобразовать.
-                    // Пока оставим как есть, пользователь может пересоздать записи.
-                    // В качестве временного решения: если статус пустой, ставим "АКТИВЕН".
-                    record.copy(status = if (record.status.isBlank()) "АКТИВЕН" else record.status)
-                } else {
-                    record
-                }
-            }
+            gson.fromJson(json, object : TypeToken<List<Record>>() {}.type)
         } catch (e: Exception) {
-            e.printStackTrace()
             emptyList()
         }
     }
@@ -87,7 +65,6 @@ object StorageManager {
         } catch (_: Exception) {}
     }
 
-    // Экспорт CSV
     fun exportCSV(context: Context, records: List<Record>, baseName: String): File? = try {
         val dir = getVzorDir().also { it.mkdirs() }
         val file = File(dir, "$baseName.csv")
@@ -100,7 +77,6 @@ object StorageManager {
         file
     } catch (_: Exception) { null }
 
-    // Экспорт JSON
     fun exportJSON(context: Context, records: List<Record>, baseName: String): File? = try {
         val dir = getVzorDir().also { it.mkdirs() }
         val file = File(dir, "$baseName.json")
@@ -108,7 +84,6 @@ object StorageManager {
         file
     } catch (_: Exception) { null }
 
-    // Экспорт XLSX
     fun exportXLSX(context: Context, records: List<Record>, baseName: String): File? {
         try {
             val dir = getVzorDir().also { it.mkdirs() }

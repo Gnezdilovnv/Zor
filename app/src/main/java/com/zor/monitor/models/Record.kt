@@ -5,7 +5,7 @@ import java.util.UUID
 
 data class Record(
     val id: String = UUID.randomUUID().toString(),
-    val date: String = "",                  // dd.MM.yy (для UI)
+    val date: String = "",
     val time: String = "",
     val direction: String = "",
     val point: String = "",
@@ -15,5 +15,5 @@ data class Record(
     val status: String = "АКТИВЕН",        // "ПОДАВЛЕН", "АКТИВЕН", "ДЕТОНАЦИЯ"
     val exported: Boolean = false,
     val voiceText: String = "",
-    val isoDate: String = ""                // yyyy-MM-dd (внутренний формат)
+    val isoDate: String = ""
 )
