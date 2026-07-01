@@ -2,7 +2,6 @@ package com.zor.monitor.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Тёмная тема
 val DarkPrimary = Color(0xFFAFC6FF)
 val DarkOnPrimary = Color(0xFF002D6D)
 val DarkPrimaryContainer = Color(0xFF528DFF)
@@ -13,7 +12,7 @@ val DarkOnSecondary = Color(0xFF003824)
 val DarkSecondaryContainer = Color(0xFF00A572)
 val DarkOnSecondaryContainer = Color(0xFF00311F)
 
-val DarkTertiary = Color(0xFFFF6F00)       // оранжевый для детонации
+val DarkTertiary = Color(0xFFFF6F00)
 val DarkOnTertiary = Color(0xFFFFFFFF)
 val DarkTertiaryContainer = Color(0xFFFFB300)
 val DarkOnTertiaryContainer = Color(0xFF3E2C00)
@@ -32,7 +31,6 @@ val DarkOnSurfaceVariant = Color(0xFFC2C6D7)
 val DarkOutline = Color(0xFF8C90A0)
 val DarkOutlineVariant = Color(0xFF424754)
 
-// Светлая тема
 val LightPrimary = Color(0xFF0059C7)
 val LightOnPrimary = Color(0xFFFFFFFF)
 val LightPrimaryContainer = Color(0xFFD9E2FF)
@@ -43,7 +41,7 @@ val LightOnSecondary = Color(0xFFFFFFFF)
 val LightSecondaryContainer = Color(0xFF6FFBBE)
 val LightOnSecondaryContainer = Color(0xFF002113)
 
-val LightTertiary = Color(0xFFE65100)       // оранжевый для детонации
+val LightTertiary = Color(0xFFE65100)
 val LightOnTertiary = Color(0xFFFFFFFF)
 val LightTertiaryContainer = Color(0xFFFFB300)
 val LightOnTertiaryContainer = Color(0xFF3E2C00)

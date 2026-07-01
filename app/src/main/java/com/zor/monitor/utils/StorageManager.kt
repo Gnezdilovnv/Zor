@@ -24,7 +24,7 @@ object StorageManager {
             .getString(RECORDS_KEY, null) ?: return emptyList()
         return try {
             gson.fromJson(json, object : TypeToken<List<Record>>() {}.type)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             emptyList()
         }
     }

@@ -49,7 +49,6 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-// Маски для даты/времени
 class DateMask : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val digits = text.text.filter { it.isDigit() }.take(8)
@@ -108,7 +107,6 @@ class TimeMask : VisualTransformation {
     }
 }
 
-// Сегментированный контрол для статуса
 @Composable
 fun SegmentedControl(
     options: List<String>,
@@ -454,7 +452,6 @@ fun DetectionContent(
             colors = CardDefaults.cardColors(containerColor = Color.Transparent)
         ) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Тип
                 ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = onExpandedTypeChange) {
                     OutlinedTextField(
                         value = type, onValueChange = {}, readOnly = true,
@@ -479,7 +476,6 @@ fun DetectionContent(
                     }
                 }
 
-                // Частота видео
                 OutlinedTextField(
                     fv, onFvChange,
                     label = { Text("Частота видео (МГц)", color = MaterialTheme.colorScheme.onSurfaceVariant) },
@@ -498,7 +494,6 @@ fun DetectionContent(
                     )
                 )
 
-                // Частота управления
                 OutlinedTextField(
                     fc, onFcChange,
                     label = { Text("Частота управления (МГц)", color = MaterialTheme.colorScheme.onSurfaceVariant) },
@@ -517,7 +512,6 @@ fun DetectionContent(
                     )
                 )
 
-                // Дата и время
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         cd, onCdChange,
@@ -552,7 +546,6 @@ fun DetectionContent(
                     )
                 }
 
-                // Статус
                 Text("Статус", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth())
                 SegmentedControl(
                     options = listOf("ПОДАВЛЕН", "АКТИВЕН", "ДЕТОНАЦИЯ"),

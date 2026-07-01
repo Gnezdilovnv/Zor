@@ -12,7 +12,7 @@ data class Record(
     val type: String = "",
     @SerializedName("freq_video") val freqVideo: String = "",
     @SerializedName("freq_control") val freqControl: String = "",
-    val status: String = "АКТИВЕН",        // "ПОДАВЛЕН", "АКТИВЕН", "ДЕТОНАЦИЯ"
+    val status: String = "АКТИВЕН",
     val exported: Boolean = false,
     val voiceText: String = "",
     val isoDate: String = ""
