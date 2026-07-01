@@ -26,15 +26,12 @@ fun SplashScreen() {
     val primaryColor = MaterialTheme.colorScheme.primary
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
 
-    // Проигрываем звук on.mp3 при появлении заставки
     LaunchedEffect(Unit) {
         try {
             val mediaPlayer = MediaPlayer.create(context, R.raw.on)
             mediaPlayer?.start()
             mediaPlayer?.setOnCompletionListener { it.release() }
-        } catch (_: Exception) {
-            // Игнорируем ошибки, чтобы приложение не падало
-        }
+        } catch (_: Exception) {}
     }
 
     Box(
@@ -47,7 +44,6 @@ fun SplashScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Анимация логотипа
             val infiniteTransition = rememberInfiniteTransition()
             val ringRadius by infiniteTransition.animateFloat(
                 initialValue = 0f,
@@ -121,7 +117,6 @@ fun SplashScreen() {
                 val radius = size.minDimension * 0.45f
                 val strokeWidth = size.minDimension * 0.08f
 
-                // Используем заранее вычисленные цвета
                 drawCircle(
                     color = primaryColor.copy(alpha = 0.3f),
                     radius = radius,

@@ -10,12 +10,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.work.*
 import com.zor.monitor.ui.MainScreen
+import com.zor.monitor.ui.SplashScreen
 import com.zor.monitor.worker.NotificationHelper
 import com.zor.monitor.worker.ReportReminderWorker
+import kotlinx.coroutines.delay
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -28,7 +31,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         NotificationHelper.createChannel(this)
 
-        // Только уведомления (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
@@ -39,8 +41,19 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            var showSplash by remember { mutableStateOf(true) }
+
+            LaunchedEffect(Unit) {
+                delay(3000)
+                showSplash = false
+            }
+
             Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                MainScreen()
+                if (showSplash) {
+                    SplashScreen()
+                } else {
+                    MainScreen()
+                }
             }
         }
     }
