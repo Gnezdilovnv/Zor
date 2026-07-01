@@ -209,7 +209,7 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                                     shareFile(path)
                                     playSound(R.raw.report_sound)
                                 } else {
-                                    Toast.makeText(ctx, "Нет новых данных", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(ctx, "Нет новых данных", Toast.Length_SHORT).show()
                                 }
                             }
                         },
