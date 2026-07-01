@@ -2,37 +2,40 @@ package com.zor.monitor.ui
 
 import android.content.Intent
 import android.media.MediaPlayer
+import android.net.Uri
 import android.widget.Toast
-import androidx.compose.foundation.Image
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.zor.monitor.R
 import com.zor.monitor.models.Record
+import com.zor.monitor.ui.theme.LocalIsDarkTheme
 import com.zor.monitor.utils.ReportGenerator
 import com.zor.monitor.utils.StorageManager
 import kotlinx.coroutines.launch
@@ -40,155 +43,23 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-// ============================================================
-//  ИСПРАВЛЕННЫЕ МАСКИ С ВАЛИДАЦИЕЙ И ПРАВИЛЬНЫМ OFFSET MAPPING
-// ============================================================
-
-class DateMask : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        // 1. Берём только цифры, максимум 8
-        val digits = text.text.filter { it.isDigit() }.take(8)
-
-        // 2. Валидация на лету (день 01-31, месяц 01-12)
-        val validatedDigits = buildString {
-            var day = ""
-            var month = ""
-            var year = ""
-            for ((index, char) in digits.withIndex()) {
-                when (index) {
-                    0 -> if (char in '0'..'3') append(char) // день: 0-3
-                    1 -> {
-                        val firstDay = if (isNotEmpty()) this[0] else '0'
-                        if (firstDay == '3' && char > '1') append('1')
-                        else if (firstDay == '0' && char == '0') append('1') // день не может быть 00
-                        else append(char)
-                    }
-                    2 -> if (char in '0'..'1') append(char) // месяц: 0-1
-                    3 -> {
-                        val firstMonth = if (length >= 3) this[2] else '0'
-                        if (firstMonth == '1' && char > '2') append('2')
-                        else if (firstMonth == '0' && char == '0') append('1')
-                        else append(char)
-                    }
-                    else -> append(char) // год (последние 4 цифры)
-                }
-            }
-        }.take(8)
-
-        // 3. Форматирование с разделителями (дд.мм.гг)
-        val formatted = buildString {
-            for (i in validatedDigits.indices) {
-                append(validatedDigits[i])
-                if (i == 1 || i == 3) append('.')
-            }
-        }
-
-        // 4. OffsetMapping – корректное преобразование позиций
-        val offsetMapping = object : OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int {
-                // Количество разделителей до позиции
-                val separatorsBefore = when {
-                    offset > 4 -> 2
-                    offset > 2 -> 1
-                    else -> 0
-                }
-                return (offset + separatorsBefore).coerceAtMost(formatted.length)
-            }
-
-            override fun transformedToOriginal(offset: Int): Int {
-                val raw = formatted.substring(0, offset)
-                val digitCount = raw.count { it.isDigit() }
-                return digitCount.coerceAtMost(8)
-            }
-        }
-
-        return TransformedText(AnnotatedString(formatted), offsetMapping)
-    }
-}
-
-class TimeMask : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        // 1. Берём только цифры, максимум 4
-        val digits = text.text.filter { it.isDigit() }.take(4)
-
-        // 2. Валидация на лету (часы 00-23, минуты 00-59)
-        val validatedDigits = buildString {
-            for ((index, char) in digits.withIndex()) {
-                when (index) {
-                    0 -> if (char in '0'..'2') append(char) // час: 0-2
-                    1 -> {
-                        val firstHour = if (isNotEmpty()) this[0] else '0'
-                        if (firstHour == '2' && char > '3') append('3')
-                        else append(char)
-                    }
-                    2 -> if (char in '0'..'5') append(char) // минута: 0-5
-                    3 -> append(char) // минута: 0-9
-                }
-            }
-        }.take(4)
-
-        // 3. Форматирование с разделителем (чч:мм)
-        val formatted = when {
-            validatedDigits.length >= 3 -> "${validatedDigits.substring(0, 2)}:${validatedDigits.substring(2)}"
-            validatedDigits.length == 2 -> "${validatedDigits}:"
-            else -> validatedDigits
-        }
-
-        // 4. OffsetMapping – корректное преобразование позиций
-        val offsetMapping = object : OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int {
-                // Разделитель появляется после двух цифр
-                val separatorsBefore = if (offset > 2) 1 else 0
-                return (offset + separatorsBefore).coerceAtMost(formatted.length)
-            }
-
-            override fun transformedToOriginal(offset: Int): Int {
-                val raw = formatted.substring(0, offset)
-                val digitCount = raw.count { it.isDigit() }
-                return digitCount.coerceAtMost(4)
-            }
-        }
-
-        return TransformedText(AnnotatedString(formatted), offsetMapping)
-    }
-}
-
-// ============================================================
-//  ВЕСЬ ОСТАЛЬНОЙ КОД БЕЗ ИЗМЕНЕНИЙ
-// ============================================================
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(onThemeChange: (Boolean) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var records by remember { mutableStateOf(StorageManager.loadRecords(ctx)) }
     var settings by remember { mutableStateOf(StorageManager.loadSettings(ctx)) }
     var customLists by remember { mutableStateOf(StorageManager.loadCustomLists(ctx)) }
-    var type by remember { mutableStateOf("") }
-    var fv by remember { mutableStateOf("") }
-    var fc by remember { mutableStateOf("") }
-    var suppressed by remember { mutableStateOf(false) }
-    val df = remember { SimpleDateFormat("dd.MM.yy", Locale.getDefault()) }
-    val tf = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    var cd by remember { mutableStateOf(df.format(Date())) }
-    var ct by remember { mutableStateOf(tf.format(Date())) }
-    var expandedType by remember { mutableStateOf(false) }
-    var showSettings by remember { mutableStateOf(false) }
-    var deleteId by remember { mutableStateOf<String?>(null) }
-    var lastReportTime by remember { mutableStateOf(settings["last_report_time"] ?: "") }
-    var isGeneratingReport by remember { mutableStateOf(false) }
-    var validationErrors by remember { mutableStateOf(mapOf<String, Boolean>()) }
-
-    val directions = customLists["directions"] ?: emptyList()
-    val points = customLists["points"] ?: emptyList()
-    val types = customLists["types"] ?: emptyList()
-    val exportFormat = settings["export_format"] ?: "xlsx"
-    val reportPeriod = settings["report_period"] ?: "all"
+    var selectedTab by remember { mutableIntStateOf(1) } // 0 - Detection, 1 - Report
     val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
     val todayRecords = records.filter { it.isoDate == todayIso }
+    var lastReportTime by remember { mutableStateOf(settings["last_report_time"] ?: "") }
+    var isGeneratingReport by remember { mutableStateOf(false) }
 
-    var selectedTab by remember { mutableIntStateOf(0) }
+    val exportFormat = settings["export_format"] ?: "xlsx"
+    val reportPeriod = settings["report_period"] ?: "all"
+    val isDark = LocalIsDarkTheme.current
 
     fun refresh() { records = StorageManager.loadRecords(ctx) }
 
@@ -205,7 +76,7 @@ fun MainScreen() {
             val file = File(path)
             val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
             val mime = when {
-                path.endsWith(".csv")  -> "text/csv"
+                path.endsWith(".csv") -> "text/csv"
                 path.endsWith(".json") -> "application/json"
                 else -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             }
@@ -220,341 +91,462 @@ fun MainScreen() {
         }
     }
 
-    fun cleanFreqInput(raw: String, min: Int, max: Int): Pair<String, String?> {
-        val digits = raw.filter { it.isDigit() }
-        val num = digits.toIntOrNull()
-        val error = if (digits.isNotEmpty() && (num == null || num < min || num > max)) "Диапазон $min–$max" else null
-        return digits to error
-    }
-
-    fun validate(): Boolean {
-        val errors = mutableMapOf<String, Boolean>()
-        if (type.isEmpty()) errors["type"] = true
-        if (fv.isEmpty()) errors["fv"] = true
-        else {
-            val num = fv.toIntOrNull()
-            if (num == null || num !in 100..12000) errors["fv_range"] = true
-        }
-        if (fc.isNotEmpty()) {
-            val num = fc.toIntOrNull()
-            if (num == null || num !in 100..5000) errors["fc_range"] = true
-        }
-        if (settings["direction"].isNullOrBlank()) errors["direction"] = true
-        if (settings["point"].isNullOrBlank()) errors["point"] = true
-        validationErrors = errors
-        return errors.isEmpty()
-    }
-
-    if (deleteId != null) {
-        AlertDialog(
-            onDismissRequest = { deleteId = null },
-            title = { Text("Удалить запись?") },
-            text = { Text("Нельзя отменить") },
-            confirmButton = {
-                TextButton(onClick = {
-                    deleteId?.let { StorageManager.deleteRecord(ctx, it) }
-                    deleteId = null
-                    refresh()
-                }) { Text("Удалить", color = Color.Red) }
-            },
-            dismissButton = { TextButton(onClick = { deleteId = null }) { Text("Отмена") } }
+    // Пульсирующая анимация для активной карточки
+    val infiniteTransition = rememberInfiniteTransition()
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
         )
-    }
-
-    if (showSettings) {
-        SettingsScreen(
-            settings = settings, directions = directions, points = points, types = types,
-            onSave = { s, l ->
-                settings = s; customLists = l
-                StorageManager.saveSettings(ctx, s)
-                StorageManager.saveCustomLists(ctx, l)
-                showSettings = false
-            },
-            onBack = { showSettings = false }
-        )
-        return
-    }
+    )
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(painter = painterResource(id = R.drawable.ic_logo), contentDescription = "Logo", modifier = Modifier.size(28.dp))
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_logo),
+                            contentDescription = "Logo",
+                            modifier = Modifier.size(32.dp)
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("VZOR", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "VZOR",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 24.sp,
+                            letterSpacing = (-0.5).sp
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface
                 ),
-                actions = { IconButton(onClick = { showSettings = true }) { Text("☰", fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurface) } }
+                actions = {
+                    IconButton(onClick = { /* радиолокационная кнопка */ }) {
+                        Icon(
+                            imageVector = Icons.Outlined.Radar,
+                            contentDescription = "Радар",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(onClick = { onThemeChange(!isDark) }) {
+                        Icon(
+                            imageVector = if (isDark) Icons.Default.DarkMode else Icons.Default.LightMode,
+                            contentDescription = "Тема"
+                        )
+                    }
+                }
             )
         }
+        // нижний бар УДАЛЁН
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            TabRow(selectedTabIndex = selectedTab, indicator = {}, divider = {}, containerColor = MaterialTheme.colorScheme.surface) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // Вкладки
+            TabRow(
+                selectedTabIndex = selectedTab,
+                indicator = {},
+                divider = {},
+                containerColor = MaterialTheme.colorScheme.surfaceContainer
+            ) {
                 listOf("ОБНАРУЖЕНИЕ", "ОТЧЕТ").forEachIndexed { index, title ->
                     val selected = selectedTab == index
                     Tab(
                         selected = selected,
                         onClick = { selectedTab = index },
-                        modifier = if (selected)
-                            Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                        else
-                            Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                    ) {
-                        Text(text = title, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, fontSize = 16.sp,
-                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
-                    }
+                        text = {
+                            Text(
+                                text = title,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 14.sp,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (selected) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             when (selectedTab) {
-                0 -> DetectionTab(
-                    type = type, onTypeChange = { type = it; validationErrors = validationErrors - "type" },
-                    types = types,
-                    expandedType = expandedType, onExpandedTypeChange = { expandedType = it },
-                    fv = fv, fc = fc,
-                    onFvChange = { raw ->
-                        val (digits, err) = cleanFreqInput(raw, 100, 12000)
-                        fv = digits
-                        if (err != null) validationErrors = validationErrors + ("fv_range" to true)
-                        else validationErrors = validationErrors - "fv_range"
-                    },
-                    onFcChange = { raw ->
-                        val (digits, err) = cleanFreqInput(raw, 100, 5000)
-                        fc = digits
-                        if (err != null) validationErrors = validationErrors + ("fc_range" to true)
-                        else validationErrors = validationErrors - "fc_range"
-                    },
-                    cd = cd, onCdChange = { cd = it },
-                    ct = ct, onCtChange = { ct = it },
-                    onSetNow = { cd = df.format(Date()); ct = tf.format(Date()) },
-                    suppressed = suppressed, onSuppressedChange = { suppressed = it },
-                    settings = settings,
-                    validationErrors = validationErrors,
-                    onSave = {
-                        if (validate()) {
-                            val isoDate = try {
-                                val parsed = df.parse(cd)
-                                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(parsed!!)
-                            } catch (_: Exception) { "" }
-                            StorageManager.addRecord(ctx, Record(
-                                date = cd, time = ct,
-                                direction = settings["direction"]!!, point = settings["point"]!!,
-                                type = type, freqVideo = fv, freqControl = fc,
-                                suppressed = if (suppressed) "ДА" else "НЕТ",
-                                voiceText = "", isoDate = isoDate
-                            ))
+                0 -> {
+                    // Вкладка "Обнаружение" (пока упрощённо)
+                    Text("Экран обнаружения в разработке", style = MaterialTheme.typography.bodyLarge)
+                }
+                1 -> {
+                    // Вкладка "Отчёт" – основной дизайн
+                    ReportContent(
+                        todayRecords = todayRecords,
+                        lastReportTime = lastReportTime,
+                        isGenerating = isGeneratingReport,
+                        onSendReport = {
+                            scope.launch {
+                                isGeneratingReport = true
+                                val path = ReportGenerator.generateReport(ctx, exportFormat, reportPeriod)
+                                isGeneratingReport = false
+                                if (path != null) {
+                                    Toast.makeText(ctx, "Отчёт создан", Toast.LENGTH_LONG).show()
+                                    val now = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
+                                    val updatedSettings = settings.toMutableMap()
+                                    updatedSettings["last_report_time"] = now
+                                    settings = updatedSettings
+                                    StorageManager.saveSettings(ctx, updatedSettings)
+                                    lastReportTime = now
+                                    refresh()
+                                    shareFile(path)
+                                    playSound(R.raw.report_sound)
+                                } else {
+                                    Toast.makeText(ctx, "Нет новых данных", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onDeleteRecord = { id ->
+                            StorageManager.deleteRecord(ctx, id)
                             refresh()
-                            fv = ""; fc = ""; suppressed = false
-                            cd = df.format(Date()); ct = tf.format(Date())
-                            validationErrors = emptyMap()
-                            Toast.makeText(ctx, "Сохранено!", Toast.LENGTH_SHORT).show()
-                            playSound(R.raw.save_sound)
-                        }
-                    },
-                    lastRecord = records.lastOrNull(),
-                    onDelete = { deleteId = it }
-                )
-                1 -> ReportTab(
-                    todayRecords = todayRecords,
-                    lastReportTime = lastReportTime,
-                    isGenerating = isGeneratingReport,
-                    onSendReport = {
-                        scope.launch {
-                            isGeneratingReport = true
-                            val p = ReportGenerator.generateReport(ctx, exportFormat, reportPeriod)
-                            isGeneratingReport = false
-                            if (p != null) {
-                                Toast.makeText(ctx, "Отчёт: $p", Toast.LENGTH_LONG).show()
-                                val now = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
-                                val updatedSettings = settings.toMutableMap()
-                                updatedSettings["last_report_time"] = now
-                                settings = updatedSettings
-                                StorageManager.saveSettings(ctx, updatedSettings)
-                                lastReportTime = now
-                                refresh()
-                                shareFile(p)
-                                playSound(R.raw.report_sound)
-                            } else Toast.makeText(ctx, "Нет новых данных", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    onDeleteRecord = { deleteId = it }
-                )
+                            Toast.makeText(ctx, "Запись удалена", Toast.LENGTH_SHORT).show()
+                        },
+                        pulseAlpha = pulseAlpha
+                    )
+                }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DetectionTab(
-    type: String, onTypeChange: (String) -> Unit, types: List<String>,
-    expandedType: Boolean, onExpandedTypeChange: (Boolean) -> Unit,
-    fv: String, fc: String,
-    onFvChange: (String) -> Unit, onFcChange: (String) -> Unit,
-    cd: String, onCdChange: (String) -> Unit,
-    ct: String, onCtChange: (String) -> Unit,
-    onSetNow: () -> Unit,
-    suppressed: Boolean, onSuppressedChange: (Boolean) -> Unit,
-    settings: Map<String, String>,
-    validationErrors: Map<String, Boolean>,
-    onSave: () -> Unit,
-    lastRecord: Record?,
-    onDelete: (String) -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Новое обнаружение", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
-        Spacer(modifier = Modifier.height(12.dp))
-
-        ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = onExpandedTypeChange) {
-            OutlinedTextField(
-                value = type, onValueChange = {}, readOnly = true,
-                label = { Text("Тип", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                isError = validationErrors["type"] == true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                    focusedLabelColor = MaterialTheme.colorScheme.primary,
-                    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    cursorColor = MaterialTheme.colorScheme.primary
-                ),
-                modifier = Modifier.fillMaxWidth().menuAnchor()
-            )
-            ExposedDropdownMenu(expandedType, { onExpandedTypeChange(false) }) {
-                types.forEach { t -> DropdownMenuItem(text = { Text(t) }, onClick = { onTypeChange(t); onExpandedTypeChange(false) }) }
-            }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(fv, onFvChange, label = { Text("Частота видео (МГц)", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-            isError = validationErrors["fv"] == true || validationErrors["fv_range"] == true,
-            supportingText = { if (validationErrors["fv_range"] == true) Text("Диапазон 100–12000", color = MaterialTheme.colorScheme.error) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                focusedLabelColor = MaterialTheme.colorScheme.primary, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant, cursorColor = MaterialTheme.colorScheme.primary)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(fc, onFcChange, label = { Text("Частота управления (МГц)", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-            isError = validationErrors["fc_range"] == true,
-            supportingText = { if (validationErrors["fc_range"] == true) Text("Диапазон 100–5000", color = MaterialTheme.colorScheme.error) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                focusedLabelColor = MaterialTheme.colorScheme.primary, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant, cursorColor = MaterialTheme.colorScheme.primary)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(cd, onCdChange, label = { Text("Дата", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                visualTransformation = DateMask(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                    focusedLabelColor = MaterialTheme.colorScheme.primary, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant, cursorColor = MaterialTheme.colorScheme.primary)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            IconButton(onClick = onSetNow) { Text("🕒", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary) }
-            OutlinedTextField(ct, onCtChange, label = { Text("Время", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                visualTransformation = TimeMask(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                    focusedLabelColor = MaterialTheme.colorScheme.primary, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant, cursorColor = MaterialTheme.colorScheme.primary)
-            )
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Подавлен", color = MaterialTheme.colorScheme.onSurface)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(if (suppressed) "ДА" else "НЕТ", fontWeight = FontWeight.Bold, color = if (suppressed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
-            Spacer(modifier = Modifier.weight(1f))
-            Switch(checked = suppressed, onCheckedChange = onSuppressedChange, colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary, checkedTrackColor = MaterialTheme.colorScheme.primaryContainer))
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = onSave, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(8.dp)) {
-            Text("СОХРАНИТЬ", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
-        }
-
-        if (lastRecord != null) {
-            Spacer(modifier = Modifier.height(20.dp))
-            Text("Последняя запись", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-            Spacer(modifier = Modifier.height(8.dp))
-            RecordCard(record = lastRecord, onDelete = { onDelete(lastRecord.id) }, showDelete = !lastRecord.exported)
-        }
-    }
-}
-
-@Composable
-fun RecordCard(record: Record, onDelete: () -> Unit, showDelete: Boolean) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = if (record.suppressed == "ДА") MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = buildString {
-                        append(record.type); append(" | В:${record.freqVideo}")
-                        if (record.freqControl.isNotEmpty()) append(" У:${record.freqControl}")
-                        append(" | ${record.date} | ${record.time}"); append(" | ")
-                        append(if (record.suppressed == "ДА") "🟢 Подавлен" else "🔴 Активен")
-                        if (record.exported) append(" ✅")
-                    },
-                    fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            if (showDelete) TextButton(onClick = onDelete) { Text("🗑", fontSize = 20.sp) }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ReportTab(
+fun ReportContent(
     todayRecords: List<Record>,
     lastReportTime: String,
     isGenerating: Boolean,
     onSendReport: () -> Unit,
-    onDeleteRecord: (String) -> Unit
+    onDeleteRecord: (String) -> Unit,
+    pulseAlpha: Float
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Статистика за сегодня", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
-            Spacer(modifier = Modifier.height(8.dp))
-            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Всего записей: ${todayRecords.size}", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
-                    Text("🟢 Подавлено: ${todayRecords.count { it.suppressed == "ДА" }}", fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
-                    Text("🔴 Активных: ${todayRecords.count { it.suppressed == "НЕТ" }}", fontSize = 16.sp, color = MaterialTheme.colorScheme.error)
+    Column {
+        // Статистика
+        Text(
+            text = "Статистика за сегодня",
+            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                        )
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(16.dp)
+                ),
+            elevation = CardDefaults.cardElevation(0.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Всего записей:", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = "${todayRecords.size}",
+                        style = MaterialTheme.typography.displayLarge.copy(
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    )
                 }
-            }
-            if (lastReportTime.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Последний отчёт отправлен: $lastReportTime", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            if (isGenerating) CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            else Button(onClick = onSendReport, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(8.dp)) {
-                Text("ОТПРАВИТЬ ОТЧЕТ", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.secondary)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Подавлено: ${todayRecords.count { it.suppressed == "ДА" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.error)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Активных: ${todayRecords.count { it.suppressed == "НЕТ" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                if (lastReportTime.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Последний отчёт отправлен: $lastReportTime",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
 
-        if (todayRecords.isNotEmpty()) {
-            Text("Обнаружения за сегодня", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
-            LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
-                items(todayRecords) { record ->
-                    RecordCard(record = record, onDelete = { onDeleteRecord(record.id) }, showDelete = !record.exported)
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Кнопка отправки отчёта
+        Button(
+            onClick = onSendReport,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ),
+            shape = RoundedCornerShape(16.dp),
+            enabled = !isGenerating
+        ) {
+            if (isGenerating) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "ОТПРАВИТЬ ОТЧЕТ",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        letterSpacing = 0.5.sp
+                    )
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Список обнаружений за сегодня
+        Text(
+            text = "Обнаружения за сегодня",
+            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (todayRecords.isEmpty()) {
+            Text(
+                text = "Нет записей за сегодня",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
         } else {
-            Spacer(modifier = Modifier.weight(1f))
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                itemsIndexed(todayRecords) { index, record ->
+                    RecordCardV2(
+                        record = record,
+                        onDelete = { onDeleteRecord(record.id) },
+                        isSuppressed = record.suppressed == "ДА",
+                        isActive = record.suppressed == "НЕТ",
+                        pulseAlpha = if (record.suppressed == "НЕТ") pulseAlpha else 1f
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RecordCardV2(
+    record: Record,
+    onDelete: () -> Unit,
+    isSuppressed: Boolean,
+    isActive: Boolean,
+    pulseAlpha: Float
+) {
+    val cardColor = if (isSuppressed) {
+        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.1f)
+    } else {
+        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
+    }
+    val borderColor = if (isSuppressed) {
+        MaterialTheme.colorScheme.secondary
+    } else {
+        MaterialTheme.colorScheme.error
+    }
+    val icon = if (isSuppressed) {
+        Icons.Filled.CheckCircle
+    } else {
+        Icons.Filled.Warning
+    }
+    val iconTint = if (isSuppressed) {
+        MaterialTheme.colorScheme.secondary
+    } else {
+        MaterialTheme.colorScheme.error
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        cardColor,
+                        cardColor.copy(alpha = 0.5f)
+                    )
+                )
+            )
+            .border(
+                width = 1.dp,
+                color = borderColor.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .alpha(if (isActive) pulseAlpha else 1f),
+        elevation = CardDefaults.cardElevation(0.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = record.type,
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSuppressed) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    if (record.freqVideo.isNotEmpty() || record.freqControl.isNotEmpty()) {
+                        Text(
+                            text = buildString {
+                                append("B:${record.freqVideo}")
+                                if (record.freqControl.isNotEmpty()) append(" Y:${record.freqControl}")
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.CalendarToday,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = record.date,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Outlined.Schedule,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = record.time,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isSuppressed) {
+                    Text(
+                        text = "Подавлено",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary
+                        ),
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                } else {
+                    Text(
+                        text = "Активен",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        ),
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(iconTint.copy(alpha = 0.2f))
+                        .clickable { onDelete() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = if (isSuppressed) "Подавлено" else "Активно",
+                        tint = iconTint,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 }
