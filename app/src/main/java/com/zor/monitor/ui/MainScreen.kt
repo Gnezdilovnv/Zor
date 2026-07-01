@@ -2,7 +2,6 @@ package com.zor.monitor.ui
 
 import android.content.Intent
 import android.media.MediaPlayer
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -190,16 +189,18 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
         } catch (_: Exception) {}
     }
 
-    // Изменено: shareFile принимает Uri, а не String
-    fun shareFile(uri: Uri) {
+    fun shareFile(path: String) {
         try {
+            val file = File(path)
+            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+            val mime = when {
+                path.endsWith(".csv") -> "text/csv"
+                path.endsWith(".json") -> "application/json"
+                else -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
             val intent = Intent(Intent.ACTION_SEND).apply {
                 putExtra(Intent.EXTRA_STREAM, uri)
-                type = when {
-                    uri.toString().endsWith(".csv") -> "text/csv"
-                    uri.toString().endsWith(".json") -> "application/json"
-                    else -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                }
+                setDataAndType(uri, mime)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             ctx.startActivity(Intent.createChooser(intent, "Поделиться отчётом"))
@@ -376,9 +377,9 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                         onSendReport = {
                             scope.launch {
                                 isGeneratingReport = true
-                                val uri = ReportGenerator.generateReport(ctx, exportFormat, reportPeriod)
+                                val path = ReportGenerator.generateReport(ctx, exportFormat, reportPeriod)
                                 isGeneratingReport = false
-                                if (uri != null) {
+                                if (path != null) {
                                     Toast.makeText(ctx, "Отчёт создан", Toast.LENGTH_LONG).show()
                                     val now = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
                                     val updatedSettings = settings.toMutableMap()
@@ -387,7 +388,7 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                                     StorageManager.saveSettings(ctx, updatedSettings)
                                     lastReportTime = now
                                     refresh()
-                                    shareFile(uri)
+                                    shareFile(path)
                                     playSound(R.raw.report_sound)
                                 } else {
                                     Toast.makeText(ctx, "Нет новых данных", Toast.LENGTH_SHORT).show()

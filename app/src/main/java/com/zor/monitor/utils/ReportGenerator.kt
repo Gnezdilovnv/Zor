@@ -1,7 +1,6 @@
 package com.zor.monitor.utils
 
 import android.content.Context
-import android.net.Uri
 import com.zor.monitor.models.Record
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -9,7 +8,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 object ReportGenerator {
-    suspend fun generateReport(context: Context, format: String = "xlsx", period: String = "all"): Uri? =
+    suspend fun generateReport(context: Context, format: String = "xlsx", period: String = "all"): String? =
         withContext(Dispatchers.IO) {
             try {
                 val filtered = filterByPeriod(StorageManager.getUnexportedRecords(context), period)
@@ -21,15 +20,14 @@ object ReportGenerator {
                 val timePart = SimpleDateFormat("HH.mm", Locale.getDefault()).format(now)
                 val baseName = "${datePart}_${timePart}_$direction"
 
-                val uri = when (format) {
+                val file = when (format) {
                     "csv" -> StorageManager.exportCSV(context, filtered, baseName)
                     "json" -> StorageManager.exportJSON(context, filtered, baseName)
                     else -> StorageManager.exportXLSX(context, filtered, baseName)
                 }
-
-                if (uri != null) {
+                if (file != null) {
                     StorageManager.markAsExported(context, filtered.map { it.id })
-                    return@withContext uri
+                    return@withContext file.absolutePath
                 }
                 null
             } catch (_: Exception) {
