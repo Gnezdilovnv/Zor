@@ -18,7 +18,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -267,7 +266,7 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                     titleContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 actions = {
-                    IconButton({ showSettings = true }) { Icon(Icons.Outlined.Settings, "Настройки", tint = MaterialTheme.colorScheme.onSurface) }
+                    IconButton({ showSettings = true }) { Icon(Icons.Filled.Settings, "Настройки", tint = MaterialTheme.colorScheme.onSurface) }
                     IconButton({ onThemeChange(!isDark) }) {
                         Icon(if (isDark) Icons.Filled.DarkMode else Icons.Filled.LightMode, "Тема")
                     }
@@ -651,11 +650,11 @@ fun RecordCard(record: Record, onDelete: () -> Unit, showDelete: Boolean) {
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.DateRange, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.Filled.DateRange, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(4.dp))
                     Text(record.date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(8.dp))
-                    Icon(Icons.Default.Schedule, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.Filled.Schedule, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(4.dp))
                     Text(record.time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -759,7 +758,7 @@ fun ReportContent(
                 CircularProgressIndicator(Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimaryContainer)
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Send, null, Modifier.size(20.dp))
+                    Icon(Icons.Filled.Send, null, Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("ОТПРАВИТЬ ОТЧЕТ", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), letterSpacing = 0.5.sp)
                 }
