@@ -52,7 +52,7 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
     var records by remember { mutableStateOf(StorageManager.loadRecords(ctx)) }
     var settings by remember { mutableStateOf(StorageManager.loadSettings(ctx)) }
     var customLists by remember { mutableStateOf(StorageManager.loadCustomLists(ctx)) }
-    var selectedTab by remember { mutableIntStateOf(1) } // 0 - Detection, 1 - Report
+    var selectedTab by remember { mutableIntStateOf(1) }
     val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
     val todayRecords = records.filter { it.isoDate == todayIso }
     var lastReportTime by remember { mutableStateOf(settings["last_report_time"] ?: "") }
