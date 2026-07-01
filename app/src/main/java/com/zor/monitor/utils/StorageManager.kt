@@ -21,7 +21,7 @@ object StorageManager {
     private const val CUSTOM_KEY = "custom_lists"
     private val gson = Gson()
 
-    // ---------- Работа с записями (без изменений) ----------
+    // ---------- Работа с записями ----------
     fun loadRecords(context: Context): List<Record> {
         val json = context.getSharedPreferences("app_data", Context.MODE_PRIVATE)
             .getString(RECORDS_KEY, null) ?: return emptyList()
@@ -64,13 +64,15 @@ object StorageManager {
     private fun backupToFile(records: List<Record>) {
         try {
             val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Vzor/Backup")
-            if (!dir.exists()) dir.mkdirs()
+            if (!dir.exists()) {
+                dir.mkdirs()
+            }
             val backupFile = File(dir, "backup_${SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault()).format(Date())}.json")
             backupFile.writeText(gson.toJson(records))
         } catch (_: Exception) {}
     }
 
-    // ---------- Экспорт через MediaStore (новый код) ----------
+    // ---------- Экспорт через MediaStore ----------
     private fun createMediaStoreUri(context: Context, fileName: String, mimeType: String): Uri? {
         val resolver = context.contentResolver
         val contentValues = ContentValues().apply {
@@ -168,7 +170,6 @@ object StorageManager {
         } catch (_: Exception) {}
     }
 
-    // Исправленные списки по умолчанию (без опечаток)
     fun getDefaults() = mapOf(
         "types" to listOf("FPV", "DJI", "Яга", "Крыло", "Радар", "Радар ударный", "Перехватчик"),
         "directions" to listOf("Днепряны", "Тарасовка", "Подокалинозка", "Маячка"),
