@@ -1,12 +1,17 @@
 package com.zor.monitor.utils
 
+import android.content.ContentValues
 import android.content.Context
+import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import com.zor.monitor.models.Record
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.File
+import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -16,9 +21,7 @@ object StorageManager {
     private const val CUSTOM_KEY = "custom_lists"
     private val gson = Gson()
 
-    private fun getVzorDir() = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Vzor")
-    private fun getBackupDir() = File(getVzorDir(), "Backup")
-
+    // ---------- Работа с записями (без изменений) ----------
     fun loadRecords(context: Context): List<Record> {
         val json = context.getSharedPreferences("app_data", Context.MODE_PRIVATE)
             .getString(RECORDS_KEY, null) ?: return emptyList()
@@ -60,36 +63,67 @@ object StorageManager {
 
     private fun backupToFile(records: List<Record>) {
         try {
-            val dir = getBackupDir().also { it.mkdirs() }
-            File(dir, "backup.json").writeText(gson.toJson(records))
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Vzor/Backup")
+            if (!dir.exists()) dir.mkdirs()
+            val backupFile = File(dir, "backup_${SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault()).format(Date())}.json")
+            backupFile.writeText(gson.toJson(records))
         } catch (_: Exception) {}
     }
 
-    fun exportCSV(context: Context, records: List<Record>, baseName: String): File? = try {
-        val dir = getVzorDir().also { it.mkdirs() }
-        val file = File(dir, "$baseName.csv")
-        file.bufferedWriter().use { w ->
-            w.write("Дата,Время,Тип,Частота видео,Частота управления,Статус,Точка,Направление\n")
-            records.forEach { r ->
-                w.write("\"${r.date}\",\"${r.time}\",\"${r.type}\",\"${r.freqVideo}\",\"${r.freqControl}\",\"${r.status}\",\"${r.point}\",\"${r.direction}\"\n")
+    // ---------- Экспорт через MediaStore (новый код) ----------
+    private fun createMediaStoreUri(context: Context, fileName: String, mimeType: String): Uri? {
+        val resolver = context.contentResolver
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Vzor")
+            } else {
+                put(MediaStore.MediaColumns.DATA, "${Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)}/Vzor/$fileName")
             }
         }
-        file
-    } catch (_: Exception) { null }
+        return resolver.insert(MediaStore.Files.getContentUri("external"), contentValues)
+    }
 
-    fun exportJSON(context: Context, records: List<Record>, baseName: String): File? = try {
-        val dir = getVzorDir().also { it.mkdirs() }
-        val file = File(dir, "$baseName.json")
-        file.writeText(gson.toJson(records))
-        file
-    } catch (_: Exception) { null }
+    private fun writeToUri(context: Context, uri: Uri, block: (OutputStream) -> Unit): Boolean {
+        return try {
+            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                block(outputStream)
+            } ?: false
+        } catch (_: Exception) {
+            false
+        }
+    }
 
-    fun exportXLSX(context: Context, records: List<Record>, baseName: String): File? {
-        try {
-            val dir = getVzorDir().also { it.mkdirs() }
-            val file = File(dir, "$baseName.xlsx")
-            file.outputStream().use { fos ->
-                val wb = XSSFWorkbook()
+    fun exportCSV(context: Context, records: List<Record>, baseName: String): Uri? {
+        val fileName = "$baseName.csv"
+        val uri = createMediaStoreUri(context, fileName, "text/csv") ?: return null
+        val success = writeToUri(context, uri) { outputStream ->
+            outputStream.bufferedWriter().use { writer ->
+                writer.write("Дата,Время,Тип,Частота видео,Частота управления,Статус,Точка,Направление\n")
+                records.forEach { r ->
+                    writer.write("\"${r.date}\",\"${r.time}\",\"${r.type}\",\"${r.freqVideo}\",\"${r.freqControl}\",\"${r.status}\",\"${r.point}\",\"${r.direction}\"\n")
+                }
+            }
+        }
+        return if (success) uri else null
+    }
+
+    fun exportJSON(context: Context, records: List<Record>, baseName: String): Uri? {
+        val fileName = "$baseName.json"
+        val uri = createMediaStoreUri(context, fileName, "application/json") ?: return null
+        val success = writeToUri(context, uri) { outputStream ->
+            outputStream.write(gson.toJson(records).toByteArray())
+        }
+        return if (success) uri else null
+    }
+
+    fun exportXLSX(context: Context, records: List<Record>, baseName: String): Uri? {
+        val fileName = "$baseName.xlsx"
+        val uri = createMediaStoreUri(context, fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") ?: return null
+        val success = writeToUri(context, uri) { outputStream ->
+            val wb = XSSFWorkbook()
+            try {
                 val sheet = wb.createSheet("Данные")
                 val headers = listOf("Дата","Время","Тип","Частота видео","Частота управления","Статус","Точка","Направление")
                 val headerRow = sheet.createRow(0)
@@ -99,13 +133,15 @@ object StorageManager {
                     listOf(r.date, r.time, r.type, r.freqVideo, r.freqControl, r.status, r.point, r.direction)
                         .forEachIndexed { j, v -> row.createCell(j).setCellValue(v) }
                 }
-                wb.write(fos)
+                wb.write(outputStream)
+            } finally {
                 wb.close()
             }
-            return file
-        } catch (_: Exception) { return null }
+        }
+        return if (success) uri else null
     }
 
+    // ---------- Настройки ----------
     fun loadSettings(context: Context): Map<String, String> {
         val json = context.getSharedPreferences("app_data", Context.MODE_PRIVATE)
             .getString(SETTINGS_KEY, null) ?: return getDefaultSettings()
@@ -132,10 +168,11 @@ object StorageManager {
         } catch (_: Exception) {}
     }
 
+    // Исправленные списки по умолчанию (без опечаток)
     fun getDefaults() = mapOf(
-        "types" to listOf("FPV","DJI","Яга","Крыло","Радар","Радар ударный","Перехватчик"),
-        "directions" to listOf("Днепряны","Тарасовка","Подокалинозка","Маячка"),
-        "points" to listOf("Нарцисс","Пион","Ландыш","Гладиолус","Хризантема")
+        "types" to listOf("FPV", "DJI", "Яга", "Крыло", "Радар", "Радар ударный", "Перехватчик"),
+        "directions" to listOf("Днепряны", "Тарасовка", "Подокалинозка", "Маячка"),
+        "points" to listOf("Нарцисс", "Пион", "Ландыш", "Гладиолус", "Хризантема")
     )
 
     private fun getDefaultSettings(): Map<String, String> = mapOf(
