@@ -23,6 +23,8 @@ import com.zor.monitor.R
 fun SplashScreen() {
     val context = LocalContext.current
     val backgroundColor = MaterialTheme.colorScheme.background
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
 
     // Проигрываем звук on.mp3 при появлении заставки
     LaunchedEffect(Unit) {
@@ -45,7 +47,7 @@ fun SplashScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Анимация логотипа (без изменений)
+            // Анимация логотипа
             val infiniteTransition = rememberInfiniteTransition()
             val ringRadius by infiniteTransition.animateFloat(
                 initialValue = 0f,
@@ -119,27 +121,28 @@ fun SplashScreen() {
                 val radius = size.minDimension * 0.45f
                 val strokeWidth = size.minDimension * 0.08f
 
+                // Используем заранее вычисленные цвета
                 drawCircle(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                    color = primaryColor.copy(alpha = 0.3f),
                     radius = radius,
                     center = center,
                     style = Stroke(width = 0.2f * size.minDimension)
                 )
                 drawCircle(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                    color = primaryColor.copy(alpha = 0.2f),
                     radius = radius * 0.67f,
                     center = center,
                     style = Stroke(width = 0.2f * size.minDimension)
                 )
 
                 drawCircle(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = ringAlpha),
+                    color = primaryColor.copy(alpha = ringAlpha),
                     radius = ringRadius * radius / 48f,
                     center = center,
                     style = Stroke(width = 0.5f * size.minDimension)
                 )
                 drawCircle(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = ringAlpha2),
+                    color = primaryColor.copy(alpha = ringAlpha2),
                     radius = ringRadius2 * radius / 48f,
                     center = center,
                     style = Stroke(width = 0.5f * size.minDimension)
@@ -151,7 +154,7 @@ fun SplashScreen() {
                     lineTo(center.x + radius * 0.6f, center.y - radius * 0.5f)
                 }
                 val brush = Brush.linearGradient(
-                    colors = listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)),
+                    colors = listOf(primaryColor, primaryColor.copy(alpha = 0.6f)),
                     start = Offset(center.x - radius * 0.6f, center.y - radius * 0.5f),
                     end = Offset(center.x + radius * 0.6f, center.y - radius * 0.5f)
                 )
@@ -162,14 +165,14 @@ fun SplashScreen() {
                 )
 
                 drawLine(
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = scanAlpha * 0.4f),
+                    color = onSurfaceColor.copy(alpha = scanAlpha * 0.4f),
                     start = Offset(center.x - radius * 0.6f, center.y - radius * 0.5f + scanY - 30f),
                     end = Offset(center.x + radius * 0.6f, center.y - radius * 0.5f + scanY - 30f),
                     strokeWidth = 1f * size.minDimension / 100f
                 )
 
                 drawCircle(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = dotOpacity),
+                    color = primaryColor.copy(alpha = dotOpacity),
                     radius = 3f * size.minDimension / 100f,
                     center = Offset(center.x, center.y - radius * 0.5f + dotY - 30f)
                 )
@@ -184,7 +187,7 @@ fun SplashScreen() {
                     fontSize = 32.sp,
                     letterSpacing = 2.sp
                 ),
-                color = MaterialTheme.colorScheme.primary
+                color = primaryColor
             )
         }
     }
