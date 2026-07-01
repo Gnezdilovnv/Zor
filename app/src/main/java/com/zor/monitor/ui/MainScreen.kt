@@ -2,7 +2,6 @@ package com.zor.monitor.ui
 
 import android.content.Intent
 import android.media.MediaPlayer
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
@@ -12,8 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -51,7 +48,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-// Маски для даты/времени (исправленные)
+// Маски для даты/времени (без изменений)
 class DateMask : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val digits = text.text.filter { it.isDigit() }.take(8)
@@ -110,6 +107,45 @@ class TimeMask : VisualTransformation {
     }
 }
 
+// Сегментированный контрол для статуса
+@Composable
+fun SegmentedControl(
+    options: List<String>,
+    selected: String,
+    onOptionSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+            .padding(2.dp)
+    ) {
+        options.forEach { option ->
+            val isSelected = option == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(
+                        if (isSelected) MaterialTheme.colorScheme.primary
+                        else Color.Transparent
+                    )
+                    .clickable { onOptionSelected(option) }
+                    .padding(vertical = 10.dp, horizontal = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = option,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+                    fontSize = 14.sp
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(onThemeChange: (Boolean) -> Unit) {
@@ -118,14 +154,14 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
     var records by remember { mutableStateOf(StorageManager.loadRecords(ctx)) }
     var settings by remember { mutableStateOf(StorageManager.loadSettings(ctx)) }
     var customLists by remember { mutableStateOf(StorageManager.loadCustomLists(ctx)) }
-    var selectedTab by remember { mutableIntStateOf(0) } // 0 - Detection, 1 - Report
+    var selectedTab by remember { mutableIntStateOf(0) }
     var showSettings by remember { mutableStateOf(false) }
 
     // Состояние для вкладки обнаружения
     var type by remember { mutableStateOf("") }
     var fv by remember { mutableStateOf("") }
     var fc by remember { mutableStateOf("") }
-    var suppressed by remember { mutableStateOf(false) }
+    var selectedStatus by remember { mutableStateOf("АКТИВЕН") }
     val df = remember { SimpleDateFormat("dd.MM.yy", Locale.getDefault()) }
     val tf = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     var cd by remember { mutableStateOf(df.format(Date())) }
@@ -143,7 +179,6 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
     var lastReportTime by remember { mutableStateOf(settings["last_report_time"] ?: "") }
     var isGeneratingReport by remember { mutableStateOf(false) }
     var deleteId by remember { mutableStateOf<String?>(null) }
-
     val isDark = LocalIsDarkTheme.current
 
     fun refresh() { records = StorageManager.loadRecords(ctx) }
@@ -253,7 +288,6 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                     titleContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 actions = {
-                    // Кнопка настроек (вместо радара)
                     IconButton(onClick = { showSettings = true }) {
                         Icon(
                             imageVector = Icons.Outlined.Settings,
@@ -261,7 +295,6 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    // Кнопка переключения темы
                     IconButton(onClick = { onThemeChange(!isDark) }) {
                         Icon(
                             imageVector = if (isDark) Icons.Filled.DarkMode else Icons.Filled.LightMode,
@@ -272,7 +305,6 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
             )
         }
     ) { padding ->
-        // Если открыты настройки, показываем их
         if (showSettings) {
             SettingsScreen(
                 settings = settings,
@@ -280,17 +312,14 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                 points = points,
                 types = types,
                 onSave = { s, l ->
-                    settings = s
-                    customLists = l
+                    settings = s; customLists = l
                     StorageManager.saveSettings(ctx, s)
                     StorageManager.saveCustomLists(ctx, l)
                     showSettings = false
-                    // Обновляем списки для текущего отображения
                 },
                 onBack = { showSettings = false }
             )
         } else {
-            // Основной контент с табами
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -298,7 +327,6 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                     .padding(horizontal = 16.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                // Вкладки
                 TabRow(
                     selectedTabIndex = selectedTab,
                     indicator = {},
@@ -333,7 +361,6 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
 
                 when (selectedTab) {
                     0 -> {
-                        // Экран обнаружения
                         DetectionContent(
                             type = type,
                             onTypeChange = { type = it; validationErrors = validationErrors - "type" },
@@ -362,8 +389,8 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                                 cd = df.format(Date())
                                 ct = tf.format(Date())
                             },
-                            suppressed = suppressed,
-                            onSuppressedChange = { suppressed = it },
+                            selectedStatus = selectedStatus,
+                            onStatusChange = { selectedStatus = it },
                             validationErrors = validationErrors,
                             onSave = {
                                 if (validate()) {
@@ -381,7 +408,7 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                                             type = type,
                                             freqVideo = fv,
                                             freqControl = fc,
-                                            suppressed = if (suppressed) "ДА" else "НЕТ",
+                                            status = selectedStatus,
                                             voiceText = "",
                                             isoDate = isoDate
                                         )
@@ -389,7 +416,7 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                                     refresh()
                                     fv = ""
                                     fc = ""
-                                    suppressed = false
+                                    selectedStatus = "АКТИВЕН"
                                     cd = df.format(Date())
                                     ct = tf.format(Date())
                                     validationErrors = emptyMap()
@@ -458,8 +485,8 @@ fun DetectionContent(
     ct: String,
     onCtChange: (String) -> Unit,
     onSetNow: () -> Unit,
-    suppressed: Boolean,
-    onSuppressedChange: (Boolean) -> Unit,
+    selectedStatus: String,
+    onStatusChange: (String) -> Unit,
     validationErrors: Map<String, Boolean>,
     onSave: () -> Unit,
     lastRecord: Record?,
@@ -476,7 +503,6 @@ fun DetectionContent(
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Карточка с полями
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -629,31 +655,19 @@ fun DetectionContent(
                     )
                 }
 
-                // Подавлен
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Подавлен",
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (suppressed) "ДА" else "НЕТ",
-                        fontWeight = FontWeight.Bold,
-                        color = if (suppressed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = suppressed,
-                        onCheckedChange = onSuppressedChange,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.primary,
-                            checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
-                        )
-                    )
-                }
+                // Сегментированный контрол для статуса
+                Text(
+                    text = "Статус",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                SegmentedControl(
+                    options = listOf("ПОДАВЛЕН", "АКТИВЕН", "ДЕТОНАЦИЯ"),
+                    selected = selectedStatus,
+                    onOptionSelected = onStatusChange,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -690,17 +704,158 @@ fun DetectionContent(
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(8.dp))
-            RecordCardV2(
+            RecordCard(
                 record = lastRecord,
                 onDelete = { onDelete(lastRecord.id) },
-                isSuppressed = lastRecord.suppressed == "ДА",
-                isActive = lastRecord.suppressed == "НЕТ",
-                pulseAlpha = 1f // нет пульсации
+                showDelete = !lastRecord.exported
             )
         }
     }
 }
 
+@Composable
+fun RecordCard(record: Record, onDelete: () -> Unit, showDelete: Boolean) {
+    val status = record.status.uppercase()
+    val (borderColor, bgColor, statusLabel) = when (status) {
+        "ПОДАВЛЕН" -> Triple(
+            MaterialTheme.colorScheme.secondary,
+            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.1f),
+            "Подавлен"
+        )
+        "ДЕТОНАЦИЯ" -> Triple(
+            MaterialTheme.colorScheme.tertiary,
+            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.1f),
+            "Детонация"
+        )
+        else -> Triple(
+            MaterialTheme.colorScheme.error,
+            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f),
+            "Активен"
+        )
+    }
+    val isActive = status == "АКТИВЕН"
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .animateContentSize()
+            .alpha(if (isActive) pulseAnimation() else 1f)
+            .border(
+                width = 1.dp,
+                color = borderColor.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        bgColor,
+                        bgColor.copy(alpha = 0.5f)
+                    )
+                )
+            ),
+        elevation = CardDefaults.cardElevation(0.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = record.type,
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = borderColor
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    if (record.freqVideo.isNotEmpty() || record.freqControl.isNotEmpty()) {
+                        Text(
+                            text = buildString {
+                                append("B:${record.freqVideo}")
+                                if (record.freqControl.isNotEmpty()) append(" Y:${record.freqControl}")
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.CalendarToday,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = record.date,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Outlined.Schedule,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = record.time,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = statusLabel,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = borderColor
+                    ),
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                if (showDelete) {
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "Удалить",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun pulseAnimation(): Float {
+    val infiniteTransition = rememberInfiniteTransition()
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+    return alpha
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportContent(
     todayRecords: List<Record>,
@@ -768,7 +923,7 @@ fun ReportContent(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Подавлено: ${todayRecords.count { it.suppressed == "ДА" }}",
+                        text = "Подавлено: ${todayRecords.count { it.status.uppercase() == "ПОДАВЛЕН" }}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -782,7 +937,21 @@ fun ReportContent(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Активных: ${todayRecords.count { it.suppressed == "НЕТ" }}",
+                        text = "Активных: ${todayRecords.count { it.status.uppercase() == "АКТИВЕН" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.tertiary)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Детонаций: ${todayRecords.count { it.status.uppercase() == "ДЕТОНАЦИЯ" }}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -859,159 +1028,11 @@ fun ReportContent(
                     .heightIn(max = 400.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                itemsIndexed(todayRecords) { index, record ->
-                    RecordCardV2(
+                items(todayRecords) { record ->
+                    RecordCard(
                         record = record,
                         onDelete = { onDeleteRecord(record.id) },
-                        isSuppressed = record.suppressed == "ДА",
-                        isActive = record.suppressed == "НЕТ",
-                        pulseAlpha = if (record.suppressed == "НЕТ") pulseAlpha else 1f
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun RecordCardV2(
-    record: Record,
-    onDelete: () -> Unit,
-    isSuppressed: Boolean,
-    isActive: Boolean,
-    pulseAlpha: Float
-) {
-    val cardColor = if (isSuppressed) {
-        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.1f)
-    } else {
-        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
-    }
-    val borderColor = if (isSuppressed) {
-        MaterialTheme.colorScheme.secondary
-    } else {
-        MaterialTheme.colorScheme.error
-    }
-    val icon = if (isSuppressed) {
-        Icons.Filled.CheckCircle
-    } else {
-        Icons.Filled.Warning
-    }
-    val iconTint = if (isSuppressed) {
-        MaterialTheme.colorScheme.secondary
-    } else {
-        MaterialTheme.colorScheme.error
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        cardColor,
-                        cardColor.copy(alpha = 0.5f)
-                    )
-                )
-            )
-            .border(
-                width = 1.dp,
-                color = borderColor.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(12.dp)
-            )
-            .alpha(if (isActive) pulseAlpha else 1f),
-        elevation = CardDefaults.cardElevation(0.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = record.type,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSuppressed) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
-                        )
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    if (record.freqVideo.isNotEmpty() || record.freqControl.isNotEmpty()) {
-                        Text(
-                            text = buildString {
-                                append("B:${record.freqVideo}")
-                                if (record.freqControl.isNotEmpty()) append(" Y:${record.freqControl}")
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.CalendarToday,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = record.date,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = Icons.Outlined.Schedule,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = record.time,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isSuppressed) {
-                    Text(
-                        text = "Подавлено",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary
-                        ),
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                } else {
-                    Text(
-                        text = "Активен",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.error
-                        ),
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(iconTint.copy(alpha = 0.2f))
-                        .clickable { onDelete() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = if (isSuppressed) "Подавлено" else "Активно",
-                        tint = iconTint,
-                        modifier = Modifier.size(18.dp)
+                        showDelete = !record.exported
                     )
                 }
             }

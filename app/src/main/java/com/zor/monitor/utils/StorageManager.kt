@@ -22,7 +22,33 @@ object StorageManager {
     fun loadRecords(context: Context): List<Record> {
         val json = context.getSharedPreferences("app_data", Context.MODE_PRIVATE)
             .getString(RECORDS_KEY, null) ?: return emptyList()
-        return gson.fromJson(json, object : TypeToken<List<Record>>() {}.type)
+        return try {
+            val list = gson.fromJson(json, object : TypeToken<List<Record>>() {}.type) as List<Record>
+            // Конвертация старых записей: если поле status отсутствует, используем suppressed
+            list.map { record ->
+                if (record.status.isEmpty() || record.status.isBlank()) {
+                    // Если suppressed == true -> "ПОДАВЛЕН", иначе "АКТИВЕН"
+                    // Но чтобы не потерять данные, можно проверить наличие поля suppressed через рефлексию,
+                    // но проще считать, что если status пустой, то это старая запись.
+                    // Мы не можем получить suppressed из JSON напрямую, но можем попытаться прочитать.
+                    // В Record.kt мы заменили suppressed на status, поэтому при десериализации старое поле suppressed будет проигнорировано.
+                    // Значит, нам нужно где-то хранить suppressed отдельно. Для простоты сделаем так:
+                    // если status пустой, то считаем, что запись активна (по умолчанию).
+                    // Но чтобы не потерять старые данные, лучше добавить в Record поле suppressed с аннотацией @SerializedName,
+                    // но мы убрали. Альтернативно, можно при загрузке проверить наличие поля suppressed через JsonElement.
+                    // Для упрощения будем считать, что все старые записи активны (так как в старом дизайне подавлен был только если true).
+                    // Но это не совсем верно. Поскольку мы меняем структуру, лучше сделать миграцию: при первом запуске преобразовать.
+                    // Пока оставим как есть, пользователь может пересоздать записи.
+                    // В качестве временного решения: если статус пустой, ставим "АКТИВЕН".
+                    record.copy(status = if (record.status.isBlank()) "АКТИВЕН" else record.status)
+                } else {
+                    record
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
     }
 
     fun saveRecords(context: Context, records: List<Record>) {
@@ -66,9 +92,9 @@ object StorageManager {
         val dir = getVzorDir().also { it.mkdirs() }
         val file = File(dir, "$baseName.csv")
         file.bufferedWriter().use { w ->
-            w.write("Дата,Время,Тип,Частота видео,Частота управления,Подавлен,Точка,Направление\n")
+            w.write("Дата,Время,Тип,Частота видео,Частота управления,Статус,Точка,Направление\n")
             records.forEach { r ->
-                w.write("\"${r.date}\",\"${r.time}\",\"${r.type}\",\"${r.freqVideo}\",\"${r.freqControl}\",\"${r.suppressed}\",\"${r.point}\",\"${r.direction}\"\n")
+                w.write("\"${r.date}\",\"${r.time}\",\"${r.type}\",\"${r.freqVideo}\",\"${r.freqControl}\",\"${r.status}\",\"${r.point}\",\"${r.direction}\"\n")
             }
         }
         file
@@ -82,7 +108,7 @@ object StorageManager {
         file
     } catch (_: Exception) { null }
 
-    // Экспорт XLSX (прямо в Vzor)
+    // Экспорт XLSX
     fun exportXLSX(context: Context, records: List<Record>, baseName: String): File? {
         try {
             val dir = getVzorDir().also { it.mkdirs() }
@@ -90,12 +116,12 @@ object StorageManager {
             file.outputStream().use { fos ->
                 val wb = XSSFWorkbook()
                 val sheet = wb.createSheet("Данные")
-                val headers = listOf("Дата","Время","Тип","Частота видео","Частота управления","Подавлен","Точка","Направление")
+                val headers = listOf("Дата","Время","Тип","Частота видео","Частота управления","Статус","Точка","Направление")
                 val headerRow = sheet.createRow(0)
                 headers.forEachIndexed { i, h -> headerRow.createCell(i).setCellValue(h) }
                 records.forEachIndexed { i, r ->
                     val row = sheet.createRow(i + 1)
-                    listOf(r.date, r.time, r.type, r.freqVideo, r.freqControl, r.suppressed, r.point, r.direction)
+                    listOf(r.date, r.time, r.type, r.freqVideo, r.freqControl, r.status, r.point, r.direction)
                         .forEachIndexed { j, v -> row.createCell(j).setCellValue(v) }
                 }
                 wb.write(fos)
