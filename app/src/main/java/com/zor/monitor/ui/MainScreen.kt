@@ -5,6 +5,7 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -91,7 +92,6 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
         }
     }
 
-    // Пульсирующая анимация для активной карточки
     val infiniteTransition = rememberInfiniteTransition()
     val pulseAlpha by infiniteTransition.animateFloat(
         initialValue = 0.6f,
@@ -136,14 +136,13 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                     }
                     IconButton(onClick = { onThemeChange(!isDark) }) {
                         Icon(
-                            imageVector = if (isDark) Icons.Default.DarkMode else Icons.Default.LightMode,
-                            contentDescription = "Тема"
+                            imageVector = if (isDark) Icons.Filled.DarkMode else Icons.Filled.LightMode,
+                            contentDescription = if (isDark) "Тёмная тема" else "Светлая тема"
                         )
                     }
                 }
             )
         }
-        // нижний бар УДАЛЁН
     ) { padding ->
         Column(
             modifier = Modifier
@@ -152,7 +151,6 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Вкладки
             TabRow(
                 selectedTabIndex = selectedTab,
                 indicator = {},
@@ -187,11 +185,9 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
 
             when (selectedTab) {
                 0 -> {
-                    // Вкладка "Обнаружение" (пока упрощённо)
                     Text("Экран обнаружения в разработке", style = MaterialTheme.typography.bodyLarge)
                 }
                 1 -> {
-                    // Вкладка "Отчёт" – основной дизайн
                     ReportContent(
                         todayRecords = todayRecords,
                         lastReportTime = lastReportTime,
@@ -240,7 +236,6 @@ fun ReportContent(
     pulseAlpha: Float
 ) {
     Column {
-        // Статистика
         Text(
             text = "Статистика за сегодня",
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
@@ -332,7 +327,6 @@ fun ReportContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Кнопка отправки отчёта
         Button(
             onClick = onSendReport,
             modifier = Modifier
@@ -369,7 +363,6 @@ fun ReportContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Список обнаружений за сегодня
         Text(
             text = "Обнаружения за сегодня",
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold)
