@@ -3,6 +3,7 @@ package com.zor.monitor.ui
 import android.content.Intent
 import android.media.MediaPlayer
 import android.widget.Toast
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -11,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -48,7 +50,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-// Маски для даты/времени (без изменений)
+// Маски для даты/времени
 class DateMask : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val digits = text.text.filter { it.isDigit() }.take(8)
@@ -107,7 +109,6 @@ class TimeMask : VisualTransformation {
     }
 }
 
-// Сегментированный контрол для статуса
 @Composable
 fun SegmentedControl(
     options: List<String>,
@@ -157,7 +158,6 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var showSettings by remember { mutableStateOf(false) }
 
-    // Состояние для вкладки обнаружения
     var type by remember { mutableStateOf("") }
     var fv by remember { mutableStateOf("") }
     var fc by remember { mutableStateOf("") }
@@ -236,7 +236,6 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
         return errors.isEmpty()
     }
 
-    // Диалог подтверждения удаления
     if (deleteId != null) {
         AlertDialog(
             onDismissRequest = { deleteId = null },
@@ -253,34 +252,14 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
         )
     }
 
-    val infiniteTransition = rememberInfiniteTransition()
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        )
-    )
-
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_logo),
-                            contentDescription = "Logo",
-                            modifier = Modifier.size(32.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "VZOR",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 24.sp,
-                            letterSpacing = (-0.5).sp
-                        )
+                        Image(painterResource(R.drawable.ic_logo), "Logo", Modifier.size(32.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("VZOR", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 24.sp, letterSpacing = (-0.5).sp)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -288,18 +267,9 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                     titleContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 actions = {
-                    IconButton(onClick = { showSettings = true }) {
-                        Icon(
-                            imageVector = Icons.Outlined.Settings,
-                            contentDescription = "Настройки",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    IconButton(onClick = { onThemeChange(!isDark) }) {
-                        Icon(
-                            imageVector = if (isDark) Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                            contentDescription = if (isDark) "Тёмная тема" else "Светлая тема"
-                        )
+                    IconButton({ showSettings = true }) { Icon(Icons.Outlined.Settings, "Настройки", tint = MaterialTheme.colorScheme.onSurface) }
+                    IconButton({ onThemeChange(!isDark) }) {
+                        Icon(if (isDark) Icons.Filled.DarkMode else Icons.Filled.LightMode, "Тема")
                     }
                 }
             )
@@ -307,10 +277,7 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
     ) { padding ->
         if (showSettings) {
             SettingsScreen(
-                settings = settings,
-                directions = directions,
-                points = points,
-                types = types,
+                settings, directions, points, types,
                 onSave = { s, l ->
                     settings = s; customLists = l
                     StorageManager.saveSettings(ctx, s)
@@ -321,7 +288,7 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
             )
         } else {
             Column(
-                modifier = Modifier
+                Modifier
                     .fillMaxSize()
                     .padding(padding)
                     .padding(horizontal = 16.dp)
@@ -340,7 +307,7 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                             onClick = { selectedTab = index },
                             text = {
                                 Text(
-                                    text = title,
+                                    title,
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                     fontSize = 14.sp,
                                     color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
@@ -356,112 +323,86 @@ fun MainScreen(onThemeChange: (Boolean) -> Unit) {
                         )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
+                Spacer(Modifier.height(24.dp))
                 when (selectedTab) {
-                    0 -> {
-                        DetectionContent(
-                            type = type,
-                            onTypeChange = { type = it; validationErrors = validationErrors - "type" },
-                            types = types,
-                            expandedType = expandedType,
-                            onExpandedTypeChange = { expandedType = it },
-                            fv = fv,
-                            fc = fc,
-                            onFvChange = { raw ->
-                                val (digits, err) = cleanFreqInput(raw, 100, 12000)
-                                fv = digits
-                                if (err != null) validationErrors = validationErrors + ("fv_range" to true)
-                                else validationErrors = validationErrors - "fv_range"
-                            },
-                            onFcChange = { raw ->
-                                val (digits, err) = cleanFreqInput(raw, 100, 5000)
-                                fc = digits
-                                if (err != null) validationErrors = validationErrors + ("fc_range" to true)
-                                else validationErrors = validationErrors - "fc_range"
-                            },
-                            cd = cd,
-                            onCdChange = { cd = it },
-                            ct = ct,
-                            onCtChange = { ct = it },
-                            onSetNow = {
-                                cd = df.format(Date())
-                                ct = tf.format(Date())
-                            },
-                            selectedStatus = selectedStatus,
-                            onStatusChange = { selectedStatus = it },
-                            validationErrors = validationErrors,
-                            onSave = {
-                                if (validate()) {
-                                    val isoDate = try {
-                                        val parsed = df.parse(cd)
-                                        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(parsed!!)
-                                    } catch (_: Exception) { "" }
-                                    StorageManager.addRecord(
-                                        ctx,
-                                        Record(
-                                            date = cd,
-                                            time = ct,
-                                            direction = settings["direction"] ?: "",
-                                            point = settings["point"] ?: "",
-                                            type = type,
-                                            freqVideo = fv,
-                                            freqControl = fc,
-                                            status = selectedStatus,
-                                            voiceText = "",
-                                            isoDate = isoDate
-                                        )
-                                    )
-                                    refresh()
-                                    fv = ""
-                                    fc = ""
-                                    selectedStatus = "АКТИВЕН"
-                                    cd = df.format(Date())
-                                    ct = tf.format(Date())
-                                    validationErrors = emptyMap()
-                                    Toast.makeText(ctx, "Сохранено!", Toast.LENGTH_SHORT).show()
-                                    playSound(R.raw.save_sound)
-                                }
-                            },
-                            lastRecord = records.lastOrNull(),
-                            onDelete = { deleteId = it }
-                        )
-                    }
-                    1 -> {
-                        ReportContent(
-                            todayRecords = todayRecords,
-                            lastReportTime = lastReportTime,
-                            isGenerating = isGeneratingReport,
-                            onSendReport = {
-                                scope.launch {
-                                    isGeneratingReport = true
-                                    val path = ReportGenerator.generateReport(ctx, exportFormat, reportPeriod)
-                                    isGeneratingReport = false
-                                    if (path != null) {
-                                        Toast.makeText(ctx, "Отчёт создан", Toast.LENGTH_LONG).show()
-                                        val now = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
-                                        val updatedSettings = settings.toMutableMap()
-                                        updatedSettings["last_report_time"] = now
-                                        settings = updatedSettings
-                                        StorageManager.saveSettings(ctx, updatedSettings)
-                                        lastReportTime = now
-                                        refresh()
-                                        shareFile(path)
-                                        playSound(R.raw.report_sound)
-                                    } else {
-                                        Toast.makeText(ctx, "Нет новых данных", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            },
-                            onDeleteRecord = { id ->
-                                StorageManager.deleteRecord(ctx, id)
+                    0 -> DetectionContent(
+                        type, onTypeChange = { type = it; validationErrors = validationErrors - "type" },
+                        types, expandedType, onExpandedTypeChange = { expandedType = it },
+                        fv, fc,
+                        onFvChange = { raw ->
+                            val (digits, err) = cleanFreqInput(raw, 100, 12000)
+                            fv = digits
+                            validationErrors = if (err != null) validationErrors + ("fv_range" to true) else validationErrors - "fv_range"
+                        },
+                        onFcChange = { raw ->
+                            val (digits, err) = cleanFreqInput(raw, 100, 5000)
+                            fc = digits
+                            validationErrors = if (err != null) validationErrors + ("fc_range" to true) else validationErrors - "fc_range"
+                        },
+                        cd, onCdChange = { cd = it },
+                        ct, onCtChange = { ct = it },
+                        onSetNow = { cd = df.format(Date()); ct = tf.format(Date()) },
+                        selectedStatus, onStatusChange = { selectedStatus = it },
+                        validationErrors,
+                        onSave = {
+                            if (validate()) {
+                                val isoDate = try {
+                                    val parsed = df.parse(cd)
+                                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(parsed!!)
+                                } catch (_: Exception) { "" }
+                                StorageManager.addRecord(ctx, Record(
+                                    date = cd, time = ct,
+                                    direction = settings["direction"] ?: "",
+                                    point = settings["point"] ?: "",
+                                    type = type,
+                                    freqVideo = fv,
+                                    freqControl = fc,
+                                    status = selectedStatus,
+                                    voiceText = "",
+                                    isoDate = isoDate
+                                ))
                                 refresh()
-                                Toast.makeText(ctx, "Запись удалена", Toast.LENGTH_SHORT).show()
-                            },
-                            pulseAlpha = pulseAlpha
-                        )
-                    }
+                                fv = ""; fc = ""; selectedStatus = "АКТИВЕН"
+                                cd = df.format(Date()); ct = tf.format(Date())
+                                validationErrors = emptyMap()
+                                Toast.makeText(ctx, "Сохранено!", Toast.LENGTH_SHORT).show()
+                                playSound(R.raw.save_sound)
+                            }
+                        },
+                        records.lastOrNull(),
+                        onDelete = { deleteId = it }
+                    )
+                    1 -> ReportContent(
+                        todayRecords,
+                        lastReportTime,
+                        isGeneratingReport,
+                        onSendReport = {
+                            scope.launch {
+                                isGeneratingReport = true
+                                val path = ReportGenerator.generateReport(ctx, exportFormat, reportPeriod)
+                                isGeneratingReport = false
+                                if (path != null) {
+                                    Toast.makeText(ctx, "Отчёт создан", Toast.LENGTH_LONG).show()
+                                    val now = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
+                                    val updatedSettings = settings.toMutableMap()
+                                    updatedSettings["last_report_time"] = now
+                                    settings = updatedSettings
+                                    StorageManager.saveSettings(ctx, updatedSettings)
+                                    lastReportTime = now
+                                    refresh()
+                                    shareFile(path)
+                                    playSound(R.raw.report_sound)
+                                } else {
+                                    Toast.makeText(ctx, "Нет новых данных", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onDeleteRecord = { id ->
+                            StorageManager.deleteRecord(ctx, id)
+                            refresh()
+                            Toast.makeText(ctx, "Запись удалена", Toast.LENGTH_SHORT).show()
+                        }
+                    )
                 }
             }
         }
@@ -492,52 +433,31 @@ fun DetectionContent(
     lastRecord: Record?,
     onDelete: (String) -> Unit
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Новое обнаружение",
-            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(modifier = Modifier.height(16.dp))
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("Новое обнаружение", style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurface)
+        Spacer(Modifier.height(16.dp))
 
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .background(
-                    brush = Brush.linearGradient(
+                    Brush.linearGradient(
                         colors = listOf(
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
                         )
                     )
                 )
-                .border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(16.dp)
-                ),
+                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(16.dp)),
             elevation = CardDefaults.cardElevation(0.dp),
             colors = CardDefaults.cardColors(containerColor = Color.Transparent)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // Тип
-                ExposedDropdownMenuBox(
-                    expanded = expandedType,
-                    onExpandedChange = onExpandedTypeChange
-                ) {
+                ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = onExpandedTypeChange) {
                     OutlinedTextField(
-                        value = type,
-                        onValueChange = {},
-                        readOnly = true,
+                        value = type, onValueChange = {}, readOnly = true,
                         label = { Text("Тип", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         isError = validationErrors["type"] == true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
@@ -548,36 +468,24 @@ fun DetectionContent(
                             unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             cursorColor = MaterialTheme.colorScheme.primary
                         ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor()
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
                     )
-                    ExposedDropdownMenu(
-                        expanded = expandedType,
-                        onDismissRequest = { onExpandedTypeChange(false) }
-                    ) {
+                    ExposedDropdownMenu(expandedType, { onExpandedTypeChange(false) }) {
                         types.forEach { t ->
-                            DropdownMenuItem(
-                                text = { Text(t) },
-                                onClick = {
-                                    onTypeChange(t)
-                                    onExpandedTypeChange(false)
-                                }
-                            )
+                            DropdownMenuItem(text = { Text(t) }, onClick = {
+                                onTypeChange(t); onExpandedTypeChange(false)
+                            })
                         }
                     }
                 }
 
                 // Частота видео
                 OutlinedTextField(
-                    value = fv,
-                    onValueChange = onFvChange,
+                    fv, onFvChange,
                     label = { Text("Частота видео (МГц)", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     isError = validationErrors["fv"] == true || validationErrors["fv_range"] == true,
                     supportingText = {
-                        if (validationErrors["fv_range"] == true) {
-                            Text("Диапазон 100–12000", color = MaterialTheme.colorScheme.error)
-                        }
+                        if (validationErrors["fv_range"] == true) Text("Диапазон 100–12000", color = MaterialTheme.colorScheme.error)
                     },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
@@ -592,14 +500,11 @@ fun DetectionContent(
 
                 // Частота управления
                 OutlinedTextField(
-                    value = fc,
-                    onValueChange = onFcChange,
+                    fc, onFcChange,
                     label = { Text("Частота управления (МГц)", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     isError = validationErrors["fc_range"] == true,
                     supportingText = {
-                        if (validationErrors["fc_range"] == true) {
-                            Text("Диапазон 100–5000", color = MaterialTheme.colorScheme.error)
-                        }
+                        if (validationErrors["fc_range"] == true) Text("Диапазон 100–5000", color = MaterialTheme.colorScheme.error)
                     },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
@@ -613,13 +518,9 @@ fun DetectionContent(
                 )
 
                 // Дата и время
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = cd,
-                        onValueChange = onCdChange,
+                        cd, onCdChange,
                         label = { Text("Дата", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         visualTransformation = DateMask(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -632,15 +533,11 @@ fun DetectionContent(
                             cursorColor = MaterialTheme.colorScheme.primary
                         )
                     )
-                    IconButton(
-                        onClick = onSetNow,
-                        modifier = Modifier.size(48.dp)
-                    ) {
+                    IconButton(onClick = onSetNow, modifier = Modifier.size(48.dp)) {
                         Text("🕒", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
                     }
                     OutlinedTextField(
-                        value = ct,
-                        onValueChange = onCtChange,
+                        ct, onCtChange,
                         label = { Text("Время", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         visualTransformation = TimeMask(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -655,13 +552,8 @@ fun DetectionContent(
                     )
                 }
 
-                // Сегментированный контрол для статуса
-                Text(
-                    text = "Статус",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                // Статус
+                Text("Статус", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth())
                 SegmentedControl(
                     options = listOf("ПОДАВЛЕН", "АКТИВЕН", "ДЕТОНАЦИЯ"),
                     selected = selectedStatus,
@@ -669,46 +561,27 @@ fun DetectionContent(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
 
-                // Кнопка сохранения
                 Button(
                     onClick = onSave,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                     ),
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Text(
-                        text = "СОХРАНИТЬ",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
-                    )
+                    Text("СОХРАНИТЬ", fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
                 }
             }
         }
 
-        // Последняя запись
         if (lastRecord != null) {
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(
-                text = "Последняя запись",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            RecordCard(
-                record = lastRecord,
-                onDelete = { onDelete(lastRecord.id) },
-                showDelete = !lastRecord.exported
-            )
+            Spacer(Modifier.height(24.dp))
+            Text("Последняя запись", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            Spacer(Modifier.height(8.dp))
+            RecordCard(lastRecord, onDelete = { onDelete(lastRecord.id) }, showDelete = !lastRecord.exported)
         }
     }
 }
@@ -741,13 +614,9 @@ fun RecordCard(record: Record, onDelete: () -> Unit, showDelete: Boolean) {
             .padding(vertical = 2.dp)
             .animateContentSize()
             .alpha(if (isActive) pulseAnimation() else 1f)
-            .border(
-                width = 1.dp,
-                color = borderColor.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(12.dp)
-            )
+            .border(1.dp, borderColor.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
             .background(
-                brush = Brush.linearGradient(
+                Brush.linearGradient(
                     colors = listOf(
                         bgColor,
                         bgColor.copy(alpha = 0.5f)
@@ -759,25 +628,20 @@ fun RecordCard(record: Record, onDelete: () -> Unit, showDelete: Boolean) {
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = record.type,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = borderColor
-                        )
+                        record.type,
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, color = borderColor)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(Modifier.width(8.dp))
                     if (record.freqVideo.isNotEmpty() || record.freqControl.isNotEmpty()) {
                         Text(
-                            text = buildString {
+                            buildString {
                                 append("B:${record.freqVideo}")
                                 if (record.freqControl.isNotEmpty()) append(" Y:${record.freqControl}")
                             },
@@ -787,53 +651,20 @@ fun RecordCard(record: Record, onDelete: () -> Unit, showDelete: Boolean) {
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.CalendarToday,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = record.date,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = Icons.Outlined.Schedule,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = record.time,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Icon(Icons.Outlined.CalendarToday, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(4.dp))
+                    Text(record.date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Outlined.Schedule, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(4.dp))
+                    Text(record.time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = statusLabel,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = borderColor
-                    ),
-                    modifier = Modifier.padding(end = 8.dp)
-                )
+                Text(statusLabel, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = borderColor), modifier = Modifier.padding(end = 8.dp))
                 if (showDelete) {
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Delete,
-                            contentDescription = "Удалить",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
+                    IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Delete, "Удалить", tint = MaterialTheme.colorScheme.onSurfaceVariant, Modifier.size(18.dp))
                     }
                 }
             }
@@ -862,120 +693,61 @@ fun ReportContent(
     lastReportTime: String,
     isGenerating: Boolean,
     onSendReport: () -> Unit,
-    onDeleteRecord: (String) -> Unit,
-    pulseAlpha: Float
+    onDeleteRecord: (String) -> Unit
 ) {
     Column {
-        Text(
-            text = "Статистика за сегодня",
-            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(16.dp))
+        Text("Статистика за сегодня", style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        Spacer(Modifier.height(16.dp))
 
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .background(
-                    brush = Brush.linearGradient(
+                    Brush.linearGradient(
                         colors = listOf(
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
                         )
                     )
                 )
-                .border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(16.dp)
-                ),
+                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(16.dp)),
             elevation = CardDefaults.cardElevation(0.dp),
             colors = CardDefaults.cardColors(containerColor = Color.Transparent)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Всего записей:", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        text = "${todayRecords.size}",
-                        style = MaterialTheme.typography.displayLarge.copy(
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    )
+                    Text("${todayRecords.size}", style = MaterialTheme.typography.displayLarge.copy(fontSize = 32.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(MaterialTheme.colorScheme.secondary)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Подавлено: ${todayRecords.count { it.status.uppercase() == "ПОДАВЛЕН" }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Box(Modifier.size(12.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.secondary))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Подавлено: ${todayRecords.count { it.status.uppercase() == "ПОДАВЛЕН" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(MaterialTheme.colorScheme.error)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Активных: ${todayRecords.count { it.status.uppercase() == "АКТИВЕН" }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Box(Modifier.size(12.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.error))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Активных: ${todayRecords.count { it.status.uppercase() == "АКТИВЕН" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(MaterialTheme.colorScheme.tertiary)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Детонаций: ${todayRecords.count { it.status.uppercase() == "ДЕТОНАЦИЯ" }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Box(Modifier.size(12.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.tertiary))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Детонаций: ${todayRecords.count { it.status.uppercase() == "ДЕТОНАЦИЯ" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
                 }
                 if (lastReportTime.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Последний отчёт отправлен: $lastReportTime",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("Последний отчёт отправлен: $lastReportTime", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(Modifier.height(24.dp))
 
         Button(
             onClick = onSendReport,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
+            modifier = Modifier.fillMaxWidth().height(56.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -984,56 +756,30 @@ fun ReportContent(
             enabled = !isGenerating
         ) {
             if (isGenerating) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                CircularProgressIndicator(Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimaryContainer)
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Send,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "ОТПРАВИТЬ ОТЧЕТ",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        letterSpacing = 0.5.sp
-                    )
+                    Icon(Icons.Default.Send, null, Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("ОТПРАВИТЬ ОТЧЕТ", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), letterSpacing = 0.5.sp)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(Modifier.height(24.dp))
 
-        Text(
-            text = "Обнаружения за сегодня",
-            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
+        Text("Обнаружения за сегодня", style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold))
+        Spacer(Modifier.height(8.dp))
 
         if (todayRecords.isEmpty()) {
-            Text(
-                text = "Нет записей за сегодня",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
+            Text("Нет записей за сегодня", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
         } else {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(todayRecords) { record ->
-                    RecordCard(
-                        record = record,
-                        onDelete = { onDeleteRecord(record.id) },
-                        showDelete = !record.exported
-                    )
+                    RecordCard(record, onDelete = { onDeleteRecord(record.id) }, showDelete = !record.exported)
                 }
             }
         }
