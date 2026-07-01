@@ -40,56 +40,122 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-// Маски
+// ============================================================
+//  ИСПРАВЛЕННЫЕ МАСКИ С ВАЛИДАЦИЕЙ И ПРАВИЛЬНЫМ OFFSET MAPPING
+// ============================================================
+
 class DateMask : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
+        // 1. Берём только цифры, максимум 8
         val digits = text.text.filter { it.isDigit() }.take(8)
+
+        // 2. Валидация на лету (день 01-31, месяц 01-12)
+        val validatedDigits = buildString {
+            var day = ""
+            var month = ""
+            var year = ""
+            for ((index, char) in digits.withIndex()) {
+                when (index) {
+                    0 -> if (char in '0'..'3') append(char) // день: 0-3
+                    1 -> {
+                        val firstDay = if (isNotEmpty()) this[0] else '0'
+                        if (firstDay == '3' && char > '1') append('1')
+                        else if (firstDay == '0' && char == '0') append('1') // день не может быть 00
+                        else append(char)
+                    }
+                    2 -> if (char in '0'..'1') append(char) // месяц: 0-1
+                    3 -> {
+                        val firstMonth = if (length >= 3) this[2] else '0'
+                        if (firstMonth == '1' && char > '2') append('2')
+                        else if (firstMonth == '0' && char == '0') append('1')
+                        else append(char)
+                    }
+                    else -> append(char) // год (последние 4 цифры)
+                }
+            }
+        }.take(8)
+
+        // 3. Форматирование с разделителями (дд.мм.гг)
         val formatted = buildString {
-            for (i in digits.indices) {
-                append(digits[i])
+            for (i in validatedDigits.indices) {
+                append(validatedDigits[i])
                 if (i == 1 || i == 3) append('.')
             }
         }
+
+        // 4. OffsetMapping – корректное преобразование позиций
         val offsetMapping = object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {
-                if (offset <= 1) return offset
-                if (offset <= 3) return offset + 1
-                if (offset <= 5) return offset + 2
-                return minOf(offset + 2, formatted.length)
+                // Количество разделителей до позиции
+                val separatorsBefore = when {
+                    offset > 4 -> 2
+                    offset > 2 -> 1
+                    else -> 0
+                }
+                return (offset + separatorsBefore).coerceAtMost(formatted.length)
             }
+
             override fun transformedToOriginal(offset: Int): Int {
-                if (offset <= 2) return offset
-                if (offset <= 5) return offset - 1
-                return maxOf(offset - 2, 0)
+                val raw = formatted.substring(0, offset)
+                val digitCount = raw.count { it.isDigit() }
+                return digitCount.coerceAtMost(8)
             }
         }
+
         return TransformedText(AnnotatedString(formatted), offsetMapping)
     }
 }
 
 class TimeMask : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
+        // 1. Берём только цифры, максимум 4
         val digits = text.text.filter { it.isDigit() }.take(4)
+
+        // 2. Валидация на лету (часы 00-23, минуты 00-59)
+        val validatedDigits = buildString {
+            for ((index, char) in digits.withIndex()) {
+                when (index) {
+                    0 -> if (char in '0'..'2') append(char) // час: 0-2
+                    1 -> {
+                        val firstHour = if (isNotEmpty()) this[0] else '0'
+                        if (firstHour == '2' && char > '3') append('3')
+                        else append(char)
+                    }
+                    2 -> if (char in '0'..'5') append(char) // минута: 0-5
+                    3 -> append(char) // минута: 0-9
+                }
+            }
+        }.take(4)
+
+        // 3. Форматирование с разделителем (чч:мм)
         val formatted = when {
-            digits.length >= 3 -> "${digits.substring(0, 2)}:${digits.substring(2)}"
-            digits.length == 2 -> "${digits}:"
-            else -> digits
+            validatedDigits.length >= 3 -> "${validatedDigits.substring(0, 2)}:${validatedDigits.substring(2)}"
+            validatedDigits.length == 2 -> "${validatedDigits}:"
+            else -> validatedDigits
         }
+
+        // 4. OffsetMapping – корректное преобразование позиций
         val offsetMapping = object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {
-                if (offset <= 1) return offset
-                if (offset == 2) return 3
-                if (offset >= 3) return offset + 1
-                return offset
+                // Разделитель появляется после двух цифр
+                val separatorsBefore = if (offset > 2) 1 else 0
+                return (offset + separatorsBefore).coerceAtMost(formatted.length)
             }
+
             override fun transformedToOriginal(offset: Int): Int {
-                if (offset <= 2) return offset
-                return offset - 1
+                val raw = formatted.substring(0, offset)
+                val digitCount = raw.count { it.isDigit() }
+                return digitCount.coerceAtMost(4)
             }
         }
+
         return TransformedText(AnnotatedString(formatted), offsetMapping)
     }
 }
+
+// ============================================================
+//  ВЕСЬ ОСТАЛЬНОЙ КОД БЕЗ ИЗМЕНЕНИЙ
+// ============================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
